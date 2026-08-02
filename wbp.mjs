@@ -304,7 +304,7 @@ extensions = ["data/extensions/wiedza.md"]
 #domain = "cdn.example.com"
 #
 # 图片搜索 API（配合 cdn.mode="search" 使用）
-#[site.myblog.search]
+#[site.myblog.images]
 #key = "your-serper-dev-api-key"
 #gl = "pl"                # 国家代码，默认 pl（波兰）
 #hl = "pl"                # 语言代码，默认 pl
@@ -342,7 +342,7 @@ extensions = ["data/extensions/wiedza.md"]
     for (const ep of extPaths) { if (existsSync(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
     let images = [];
     if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); } }
-    const safe = site.search ? { ...site.search, key: undefined } : null;
+    const safe = site.images ? { ...site.images, key: undefined } : null;
     console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, search: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
     return;
   }
@@ -379,7 +379,7 @@ extensions = ["data/extensions/wiedza.md"]
       if (images.length) finalContent = mixImages(finalContent, images);
     } else if (cm === 'search') {
       console.log('正在搜索图片...');
-      try { const images = await searchImages(site.search || {}, tags, title); if (images.length) finalContent = mixImages(finalContent, images); }
+      try { const images = await searchImages(site.images || {}, tags, title); if (images.length) finalContent = mixImages(finalContent, images); }
       catch (e) { console.warn('  图片搜索失败:', e.message); }
     } else if (cm === 'cdn') {
       console.log('纯 CDN 模式 — 远程图片 URL 保持不变');
