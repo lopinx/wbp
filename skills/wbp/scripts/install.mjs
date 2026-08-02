@@ -69,15 +69,20 @@ console.log('xlsx 已安装。');
 writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
 console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'));
 
-// ── 复制数据文件 ──
+// ── 复制数据文件（引用数据无条件更新，用户配置文件不覆盖）──
 if (existsSync(DATA_SRC)) {
   const { readdirSync, statSync } = await import('fs');
+  const REF_FILES = ['keywords.xlsx', 'products.xlsx', 'prompts.md'];
+  const REF_DIRS = ['extensions'];
   const cp = (src, dst) => {
     if (!existsSync(dst)) mkdirSync(dst, { recursive: true });
     for (const f of readdirSync(src)) {
       const s = join(src, f), d = join(dst, f);
-      if (statSync(s).isDirectory()) cp(s, d);
-      else if (!existsSync(d)) writeFileSync(d, readFileSync(s));
+      if (statSync(s).isDirectory()) {
+        if (REF_DIRS.includes(f)) cp(s, d);
+      } else if (REF_FILES.includes(f) || !existsSync(d)) {
+        writeFileSync(d, readFileSync(s));
+      }
     }
   };
   cp(DATA_SRC, DATA_DST);

@@ -29,6 +29,22 @@
 
 ## 安装
 
+### 方式一：npx 直接安装（推荐，无需 clone 仓库）
+
+```bash
+# 一键安装到 ~/.wbp 并创建 AI 命令
+npx github:lopinx/wbp install
+
+# 或分步执行
+npx github:lopinx/wbp init     # 生成配置模板
+npx github:lopinx/wbp pick     # 选取关键词
+npx github:lopinx/wbp publish ~/.wbp/_draft.json  # 发布文章
+```
+
+> `npx github:lopinx/wbp` 会自动从 GitHub 拉取最新代码并在临时目录运行，安装脚本会将核心文件复制到 `~/.wbp/`，并在检测到的 AI 工具（Claude Code、Codex 等）中创建调用命令。
+
+### 方式二：传统 git clone 安装
+
 ```bash
 git clone https://github.com/lopinx/wbp.git
 cd wbp
