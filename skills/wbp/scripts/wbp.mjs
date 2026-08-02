@@ -264,7 +264,29 @@ async function checkQuality(title, content, excerpt, tags, site) {
   if (siteOrigin) {
     const internalLinks = [...(content || '').matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).filter(u => u && u.startsWith(siteOrigin));
     if (internalLinks.length === 0) warnings.push('没有内部链接');
+    // 产品内链：排除首页与分类/标签聚合页，仅统计指向详情页的链接
+    const rootRe = new RegExp('^' + siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/?$');
+    const navRe = new RegExp('^' + siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/(category|tag|tagi|kategoria|produkty|shop|blog)/?([^/]+/)?$');
+    const productLinks = internalLinks.filter(u => !rootRe.test(u) && !navRe.test(u));
+    if (productLinks.length < 3) warnings.push(`产品内链不足 (${productLinks.length} 条，建议≥3)`);
   }
+  // ponytail: 关键词命中用标签作主关键词近似，文档级无 TF-IDF；升级可读 pick 的真实主关键词
+  const kwList = asArray(tags || []).map(t => String(t).toLowerCase()).filter(t => t && t.length > 2);
+  if (kwList.length) {
+    const lowerText = (text || '').toLowerCase();
+    const hit = kwList.filter(k => {
+      const re = new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      const m = lowerText.match(re);
+      return m && m.length >= 2;
+    });
+    if (hit.length === 0) warnings.push(`关键词命中不足 (标签在正文出现均少于 2 次)`);
+  }
+  // E-E-A-T 信号：作者署名 + 权威来源引用
+  const fullText = (content || '') + ' ' + (excerpt || '');
+  const eeatSignals = [];
+  if (/(作者|署名|Author|Redakcja|Przez|Ekspert)/i.test(fullText)) eeatSignals.push('author');
+  if (/(根据|实验室|检测中心|数据来源|Źródło|Według|raport|badani[ae])/i.test(fullText)) eeatSignals.push('source');
+  if (eeatSignals.length < 2) warnings.push(`E-E-A-T 信号不足 (${eeatSignals.join('/') || '无'}，建议补作者署名+数据来源)`);
   const links = [...(content || '').matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
   if (links.length > 0) {
     const codes = await Promise.all(links.slice(0, 3).map(u => fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(5000), redirect: 'follow' }).then(r => r.status).catch(() => 500)));
