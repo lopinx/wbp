@@ -7,18 +7,22 @@ import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCRIPT_DIR = join(__dirname, '..');
+const ROOT_DIR = join(SCRIPT_DIR, '..', '..');
+const REF_DATA_DIR = join(ROOT_DIR, 'skills', 'wbp', 'references', 'data');
 const HOME = process.env.HOME || process.env.USERPROFILE;
 const WP_DIR = join(HOME, '.wbp');
 
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log(`  ✓ ${msg}`); } else { fail++; console.log(`  ✗ ${msg}`); } }
-function run(cmd, args) { return spawnSync(process.execPath, [cmd, ...args], { cwd: __dirname, encoding: 'utf-8' }); }
+function run(cmd, args) { return spawnSync(process.execPath, [cmd, ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8' }); }
+function runScript(file, args) { return spawnSync(process.execPath, [join(SCRIPT_DIR, file), ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8' }); }
 
 // ── 1. 语法检查 ──
 console.log('## 1. 语法检查');
-ok(run('--check', ['wbp.mjs']).status === 0, 'wbp.mjs 语法正确');
-ok(run('--check', ['install.mjs']).status === 0, 'install.mjs 语法正确');
-ok(run('--check', ['selftest.mjs']).status === 0, 'selftest.mjs 语法正确');
+ok(run('--check', [join(SCRIPT_DIR, 'wbp.mjs')]).status === 0, 'wbp.mjs 语法正确');
+ok(run('--check', [join(SCRIPT_DIR, 'install.mjs')]).status === 0, 'install.mjs 语法正确');
+ok(run('--check', [join(__dirname, 'selftest.mjs')]).status === 0, 'selftest.mjs 语法正确');
 
 // ── 2. 初始化 ──
 console.log('\n## 2. 初始化');
@@ -37,7 +41,7 @@ if (d) {
   ok(d.site.categories, '包含站点分类');
   ok(d.keyword, '包含关键词');
   ok(d.keywordRow, '包含关键词行号');
-  ok(d.prompts.includes('写作指令'), '包含写作提示');
+  ok(d.prompts.includes('波兰语'), '包含写作提示');
   ok(d.products.length > 0, '包含产品列表');
   ok(Array.isArray(d.products), '产品字段为数组');
   ok(d.products.length <= 5, '产品数量不超过 5');
@@ -45,7 +49,7 @@ if (d) {
 
 // ── 4. TOML 解析器深度测试 ──
 console.log('\n## 4. TOML 解析器');
-const src = readFileSync(join(__dirname, 'wbp.mjs'), 'utf-8');
+const src = readFileSync(join(SCRIPT_DIR, 'wbp.mjs'), 'utf-8');
 const tomlFn = src.match(/function parseToml[\s\S]*?\n\}/);
 ok(!!tomlFn, 'parseToml 已定义');
 const pt = eval(`(function() { ${tomlFn[0]}; return parseToml; })()`);
@@ -186,21 +190,21 @@ if (isAbsPathFn) {
 
 // ── 11. 安装脚本 ──
 console.log('\n## 11. 安装脚本');
-const installSrc = readFileSync(join(__dirname, 'install.mjs'), 'utf-8');
+const installSrc = readFileSync(join(SCRIPT_DIR, 'install.mjs'), 'utf-8');
 ok(installSrc.includes('checkCLI'), '安装脚本包含 CLI 检测');
 ok(installSrc.includes('detectedTools'), '安装脚本包含工具跟踪');
 ok(installSrc.includes('prompt'), '安装脚本包含提示模板');
 
 // ── 12. 文档 ──
 console.log('\n## 12. 文档');
-ok(existsSync(join(__dirname, 'AGENTS.md')), 'AGENTS.md 存在');
+ok(existsSync(join(SCRIPT_DIR, '../../../AGENTS.md')), 'AGENTS.md 存在');
 
 // ── 13. 数据文件 ──
 console.log('\n## 13. 数据文件');
-ok(existsSync(join(__dirname, 'data', 'keywords.xlsx')), 'keywords.xlsx 存在');
-ok(existsSync(join(__dirname, 'data', 'products.xlsx')), 'products.xlsx 存在');
-ok(existsSync(join(__dirname, 'data', 'prompts.md')), 'prompts.md 存在');
-ok(existsSync(join(__dirname, 'data', 'extensions', 'wiedza.md')), 'wiedza.md 存在');
+ok(existsSync(join(SCRIPT_DIR, '../references/data', 'keywords.xlsx')), 'keywords.xlsx 存在');
+ok(existsSync(join(SCRIPT_DIR, '../references/data', 'products.xlsx')), 'products.xlsx 存在');
+ok(existsSync(join(SCRIPT_DIR, '../references/data', 'prompts.md')), 'prompts.md 存在');
+ok(existsSync(join(SCRIPT_DIR, '../references/data', 'extensions', 'wiedza.md')), 'wiedza.md 存在');
 
 // ── 14. 错误处理 ──
 console.log('\n## 14. 错误处理');
@@ -235,7 +239,7 @@ try {
 
 // ── 15. AGENTS.md 验证 ──
 console.log('\n## 15. AGENTS.md 验证');
-const rootAgents = readFileSync(join(__dirname, 'AGENTS.md'), 'utf-8');
+const rootAgents = readFileSync(join(SCRIPT_DIR, '../../../AGENTS.md'), 'utf-8');
 ok(rootAgents.includes('用途'), '根目录 AGENTS.md 包含 用途');
 ok(rootAgents.includes('关键文件'), '根目录 AGENTS.md 包含 关键文件');
 ok(rootAgents.includes('给 AI 代理的指引'), '根目录 AGENTS.md 包含 给 AI 代理的指引');

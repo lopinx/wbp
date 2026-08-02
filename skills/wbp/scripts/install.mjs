@@ -14,6 +14,8 @@ import { execSync } from 'child_process';
 const WP_DIR = join(homedir(), '.wbp');
 const SRC_DIR = dirname(fileURLToPath(import.meta.url));
 const SRC_MJS = join(SRC_DIR, 'wbp.mjs');
+const DATA_SRC = join(SRC_DIR, '../references/data');
+const DATA_DST = join(WP_DIR, 'data');
 
 console.log('=== WordPress 发布器安装程序 ===\n');
 
@@ -64,7 +66,7 @@ try {
 console.log('xlsx 已安装。');
 
 // ── 复制 wbp.mjs ──
-writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
+undefined
 console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'));
 
 // ── 确保数据目录存在 ──

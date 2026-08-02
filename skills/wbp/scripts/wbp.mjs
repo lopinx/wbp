@@ -5,9 +5,9 @@ import { join } from 'path';
 import { createHash, createHmac } from 'crypto';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
+const DATA_DIR = join(import.meta.dirname, '..', 'references');
 
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 const asArray = x => Array.isArray(x) ? x : [x];
 
 async function resolveCategoryIds(site, cats) {
@@ -107,11 +107,15 @@ async function fetchWithRetry(url, opts, retries = 3) {
     try {
       const res = await fetch(url, { ...opts, signal: timeout ? AbortSignal.timeout(timeout) : opts.signal });
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
-      if (i < retries) { const d = 1000 * Math.pow(2, i) + Math.random() * 200; console.warn(`  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d)); }
-      else return res;
+      if (i >= retries) return res;
+      const d = 1000 * Math.pow(2, i) + Math.random() * 200;
+      console.warn(`  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`);
+      await new Promise(r => setTimeout(r, d));
     } catch (e) {
-      if (i < retries) { const d = 1000 * Math.pow(2, i) + Math.random() * 200; console.warn(`  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d)); }
-      else throw e;
+      if (i >= retries) throw e;
+      const d = 1000 * Math.pow(2, i) + Math.random() * 200;
+      console.warn(`  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`);
+      await new Promise(r => setTimeout(r, d));
     }
   }
 }
@@ -136,7 +140,7 @@ async function s3List(cfg) {
     const res = await fetchWithRetry(`${baseUrl}/?${q}`, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { host, 'x-amz-content-sha256': ph, 'x-amz-date': amz, authorization: auth } });
     if (!res.ok) { const errText = await res.text().catch(() => ''); throw new Error(`S3 列表获取失败: ${res.status} — ${errText.slice(0, 200)}`); }
     const xml = await res.text();
-    const unesc = xml.replace(/&(amp|lt|gt|quot|apos);/g, (_, e) => ENTITIES[e]);
+    const unesc = xml.replace(/&(amp|lt|gt|quot|apos);/g, (_, e) => ({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[e]);
     images.push(...[...unesc.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]));
     const ct = unesc.match(/<IsTruncated>true<\/IsTruncated>/);
     token = ct ? (unesc.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/) || [,''])[1] : '';
@@ -326,7 +330,7 @@ extensions = ["data/extensions/wiedza.md"]
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
   site.name = siteName;
 
-  const rp = (p) => p ? (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) ? p : join(WP_DIR, p)) : null;
+  const rp = (p) => p ? (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) ? p : join(DATA_DIR, p)) : null;
   const kwPaths = asArray(site.keywords).map(p => rp(p)).filter(Boolean);
   const prodPath = rp(site.products), promptPath = rp(site.prompts), extPaths = (site.extensions || []).map(p => rp(p));
 

@@ -2,17 +2,17 @@
   "name": "@lopinx/wbp",
   "version": "2.0.0",
   "description": "Cross-platform WordPress AI publisher CLI — pick keyword, generate content, mix images, publish via REST API",
-  "main": "wbp.mjs",
+  "main": "skills/wbp/scripts/wbp.mjs",
   "bin": {
-    "wbp": "./wbp.mjs"
+    "wbp": "skills/wbp/scripts/wbp.mjs"
   },
   "scripts": {
-    "start": "node wbp.mjs",
-    "test": "node selftest.mjs",
-    "pick": "node wbp.mjs pick",
-    "publish": "node wbp.mjs publish",
-    "init": "node wbp.mjs init",
-    "install": "node install.mjs"
+    "start": "node skills/wbp/scripts/wbp.mjs",
+    "test": "node skills/wbp/scripts/__TEST__/selftest.mjs",
+    "pick": "node skills/wbp/scripts/wbp.mjs pick",
+    "publish": "node skills/wbp/scripts/wbp.mjs publish",
+    "init": "node skills/wbp/scripts/wbp.mjs init",
+    "install": "node skills/wbp/scripts/install.mjs"
   },
   "keywords": ["wordpress", "publisher", "cli", "ai", "vape", "s3", "qiniu", "minio"],
   "author": "",

@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # Build outputs
 dist/
@@ -38,19 +39,13 @@ yarn-error.log*
 coverage/
 
 # OMC runtime state
-.omc/state/
-.omc/sessions/
-.omc/project-memory.json
-.omc/handoffs/
-.omc/logs/
-.omc/artifacts/
-.omc/plans/
-.omc/research/
-.omc/notepad.md
-.omc/ultragoal/
+.omc/
 
 # CodeGraph index
 .codegraph/
 
 # TypeScript
 *.tsbuildinfo
+
+# Documents
+package.json

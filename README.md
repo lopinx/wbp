@@ -166,27 +166,55 @@ keywords = ["data/blog2-keywords.xlsx"]
 
 ```
 wbp/
-├── wbp.mjs              # 核心 CLI (371 行)
-├── install.mjs          # 一键安装脚本
-├── selftest.mjs         # 88 项自检测试
+├── SKILL.md             # 技能定义
+├── scripts/
+│   ├── wbp.mjs          # 核心 CLI
+│   ├── install.mjs      # 一键安装脚本
+│   └── __TEST__/
+│       └── selftest.mjs # 88 项自检测试
+├── references/
+│   └── data/
+│       ├── keywords.xlsx    # 关键词池
+│       ├── products.xlsx    # 产品数据
+│       ├── prompts.md       # 写作指令
+│       └── extensions/
+│           └── wiedza.md    # 行业知识
 ├── package.json         # ESM 模块
 ├── AGENTS.md            # AI 代理指引
 ├── CLAUDE.md            # Claude Code 项目记忆
 ├── README.md            # 完整文档
-├── data/
-│   ├── keywords.xlsx    # 关键词池
-│   ├── products.xlsx    # 产品数据
-│   ├── prompts.md       # 写作指令
-│   └── extensions/
-│       └── wiedza.md    # 行业知识
-└── .omc/skills/wbp/
-    └── SKILL.md         # OMC 项目级技能
+└── LICENSE              # 许可证
 ```
 
 ```bash
 node selftest.mjs    # 88/88 通过
 node --check wbp.mjs # 语法检查
 ```
+
+## 打包为 Skill Zip
+
+要将此项目打包为可分发的 Skill zip 文件（适用于 Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw 等），请执行以下步骤：
+
+1. 确保已安装 `zip` 命令（Windows 用户可使用 PowerShell 的 `Compress-Archive`）。
+2. 在项目根目录运行：
+
+```bash
+zip -r wbp-skill.zip wbp.skill.md README.md AGENTS.md CLAUDE.md wbp.mjs install.mjs selftest.mjs data/ package.json
+```
+
+3. 生成的 `wbp-skill.zip` 文件即可分发或导入到 AI 工具的技能目录中。
+
+### 导入到不同 AI 工具
+
+| AI 工具 | 导入位置 | 调用方式 |
+|---------|----------|----------|
+| **Claude Code** | `~/.claude/skills/wbp.skill.md` | `/wbp` |
+| **OpenAI Codex** | `~/.codex/skills/wbp.skill.md` | `@wbp` |
+| **OpenCode** | `~/.config/opencode/skills/wbp.skill.md` | `/wbp` |
+| **Hermes** | `~/.hermes/skills/wbp.skill.md` | `/wbp` |
+| **OpenClaw** | `~/.openclaw/skills/wbp.skill.md` | `/wbp` |
+
+也可以使用 `install.mjs` 脚本自动检测并安装到这些工具。
 
 ## 许可
 
