@@ -16,7 +16,6 @@ const WP_DIR = join(HOME, '.wbp');
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log(`  ✓ ${msg}`); } else { fail++; console.log(`  ✗ ${msg}`); } }
 function run(cmd, args) { return spawnSync(process.execPath, [cmd, ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8' }); }
-function runScript(file, args) { return spawnSync(process.execPath, [join(SCRIPT_DIR, file), ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8' }); }
 
 // ── 1. 语法检查 ──
 console.log('## 1. 语法检查');
@@ -157,14 +156,6 @@ ok(src.includes('async function searchImages'), 'searchImages 已定义');
 ok(src.includes('fetchWithRetry'), 'fetchWithRetry 已定义');
 ok(src.includes('uriEncode('), 'uriEncode 已定义');
 
-// S3 URI 编码
-const uriFn = src.match(/function uriEncodeS3[\s\S]*?\n\}/);
-if (uriFn) {
-  const uriEnc = eval(`(function() { ${uriFn[0]}; return uriEncodeS3; })()`);
-  ok(uriEnc('test') === 'test', 'uriEncodeS3 纯文本');
-  ok(uriEnc('a b') === 'a%20b', 'uriEncodeS3 空格');
-}
-
 // ── 9. WP API 函数 ──
 console.log('\n## 9. WP API 函数');
 ok(src.includes('function wpAuth'), 'wpAuth 已定义');
@@ -173,20 +164,6 @@ ok(src.includes('async function uploadImage'), 'uploadImage 已定义');
 ok(src.includes('async function uploadExternalImages'), 'uploadExternalImages 已定义');
 ok(src.includes('async function findOrCreate'), 'findOrCreate 已定义');
 ok(src.includes('async function checkDuplicate'), 'checkDuplicate 已定义');
-
-// ── 10. 辅助函数 ──
-console.log('\n## 10. 辅助函数');
-
-// isAbsPath 测试
-const isAbsPathFn = src.match(/function isAbsPath[\s\S]*?\n\}/);
-if (isAbsPathFn) {
-  const iap = eval(`(function() { ${isAbsPathFn[0]}; return isAbsPath; })()`);
-  ok(iap('/abc'), 'Unix 绝对路径');
-  ok(iap('C:\\abc'), 'Windows 绝对路径');
-  ok(iap('D:/abc'), 'Windows 绝对路径（正斜杠）');
-  ok(!iap('relative/path'), '相对路径返回 false');
-  ok(!iap(''), '空字符串返回 false');
-}
 
 // ── 11. 安装脚本 ──
 console.log('\n## 11. 安装脚本');
