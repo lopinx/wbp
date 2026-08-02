@@ -41,6 +41,7 @@ const TOOLS = [
   { name: 'OpenCode',     slug: 'opencode', dir: ['.config', 'opencode', 'commands'], invoke: '/wbp' },
   { name: 'Hermes',       slug: 'hermes',   dir: ['.hermes', 'commands'],            invoke: '/wbp' },
   { name: 'OpenClaw',     slug: 'openclaw', dir: ['.openclaw', 'commands'],          invoke: '/wbp' },
+  { name: 'Trae Work (SOLO)', slug: 'trae', dir: ['.trae', 'rules'],                 invoke: '/wbp' },
 ];
 
 const detectedTools = TOOLS.filter(t => {
