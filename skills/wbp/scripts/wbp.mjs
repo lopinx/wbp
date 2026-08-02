@@ -278,6 +278,12 @@ async function checkQuality(title, content, excerpt, tags, site) {
 async function main() {
   const cmd = process.argv[2] || 'pick';
 
+  if (cmd === 'install') {
+    const { default: install } = await import('./install.mjs');
+    await install();
+    return;
+  }
+
   if (cmd === 'init') {
     writeFileSync(CFG, `# ~/.wbp/setting.toml
 [site.myblog]

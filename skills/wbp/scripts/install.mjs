@@ -17,7 +17,8 @@ const SRC_MJS = join(SRC_DIR, 'wbp.mjs');
 const DATA_SRC = join(SRC_DIR, '../references/data');
 const DATA_DST = join(WP_DIR, 'data');
 
-console.log('=== WordPress 发布器安装程序 ===\n');
+async function install() {
+  console.log('=== WordPress 发布器安装程序 ===\n');
 
 // ── 辅助函数：检查 CLI 是否存在 ──
 function checkCLI(cmd, args = ['--version']) {
@@ -187,3 +188,6 @@ if (detectedTools.length === 0) {
 
 console.log(`\n=== 安装完成 ===\n核心文件：${join(WP_DIR, 'wbp.mjs')}\n配置文件：${join(WP_DIR, 'setting.toml')}（运行 node wbp.mjs init 创建）`);
 if (detectedTools.length > 0) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+}
+
+export default install;
