@@ -249,14 +249,14 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const text = (content || excerpt || '').replace(/<[^>]+>/g, '');
   const wordCount = text.split(/[\s]+/).filter(Boolean).length;
   const paras = (content || excerpt || '').match(PARA_RE) || [];
-  const h2 = (content || excerpt || '').match(/<h2[^>]*>/g) || [];
+  const h3 = (content || excerpt || '').match(/<h3[^>]*>/g) || [];
   const checks = [
-    [wordCount < 60, `词数 ${wordCount} 少于 60`],
-    [paras.length < 3, `仅有 ${paras.length} 个段落`],
-    [h2.length < 2, `仅有 ${h2.length} 个 H2 标题`],
-    [!title || title.length < 20, `标题过短 (${title?.length || 0} 字符)`],
+    [wordCount < 600, `词数 ${wordCount} 少于 600`],
+    [paras.length < 8, `仅有 ${paras.length} 个段落`],
+    [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`],
+    [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`],
     [!excerpt || excerpt.length < 50, `摘要过短 (${excerpt?.length || 0} 字符)`],
-    [!tags || tags.length < 2, `仅有 ${tags?.length || 0} 个标签`],
+    [!tags || tags.length < 3, `仅有 ${tags?.length || 0} 个标签`],
     [tags && tags.length > 10, `标签过多 (${tags.length} 个)`],
   ];
   for (const [cond, msg] of checks) { if (cond) issues.push(msg); }
@@ -281,12 +281,9 @@ async function checkQuality(title, content, excerpt, tags, site) {
     });
     if (hit.length === 0) warnings.push(`关键词命中不足 (标签在正文出现均少于 2 次)`);
   }
-  // E-E-A-T 信号：作者署名 + 权威来源引用
-  const fullText = (content || '') + ' ' + (excerpt || '');
-  const eeatSignals = [];
-  if (/(作者|署名|Author|Redakcja|Przez|Ekspert)/i.test(fullText)) eeatSignals.push('author');
-  if (/(根据|实验室|检测中心|数据来源|Źródło|Według|raport|badani[ae])/i.test(fullText)) eeatSignals.push('source');
-  if (eeatSignals.length < 2) warnings.push(`E-E-A-T 信号不足 (${eeatSignals.join('/') || '无'}，建议补作者署名+数据来源)`);
+  // E-E-A-T 信号：外部权威外链（语言无关，结构化判断，避免关键词误判）
+  const extHref = [...(content || '').matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).filter(u => !siteOrigin || !u.startsWith(siteOrigin));
+  if (extHref.length === 0) warnings.push('E-E-A-T 信号不足 (无外部权威外链，建议引用权威来源链接)');
   const links = [...(content || '').matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
   if (links.length > 0) {
     const codes = await Promise.all(links.slice(0, 3).map(u => fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(5000), redirect: 'follow' }).then(r => r.status).catch(() => 500)));
