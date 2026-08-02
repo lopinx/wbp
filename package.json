@@ -14,7 +14,16 @@
     "init": "node skills/wbp/scripts/wbp.mjs init",
     "install": "node skills/wbp/scripts/install.mjs"
   },
-  "keywords": ["wordpress", "publisher", "cli", "ai", "vape", "s3", "qiniu", "minio"],
+  "keywords": [
+    "wordpress",
+    "publisher",
+    "cli",
+    "ai",
+    "vape",
+    "s3",
+    "qiniu",
+    "minio"
+  ],
   "author": "",
   "license": "WTFPL",
   "type": "module",
@@ -31,5 +40,18 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "skills": {
+    "wbp": {
+      "path": "skills/wbp/SKILL.md"
+    }
+  },
+  "files": [
+    "skills/",
+    "package.json",
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "LICENSE"
+  ]
 }

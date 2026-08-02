@@ -66,8 +66,25 @@ try {
 console.log('xlsx 已安装。');
 
 // ── 复制 wbp.mjs ──
-undefined
+writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
 console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'));
+
+// ── 复制数据文件 ──
+if (existsSync(DATA_SRC)) {
+  const { readdirSync, statSync } = await import('fs');
+  const cp = (src, dst) => {
+    if (!existsSync(dst)) mkdirSync(dst, { recursive: true });
+    for (const f of readdirSync(src)) {
+      const s = join(src, f), d = join(dst, f);
+      if (statSync(s).isDirectory()) cp(s, d);
+      else writeFileSync(d, readFileSync(s));
+    }
+  };
+  cp(DATA_SRC, DATA_DST);
+  console.log('数据文件已复制到', DATA_DST);
+} else {
+  console.warn('⚠ 未找到数据源目录:', DATA_SRC);
+}
 
 // ── 确保数据目录存在 ──
 for (const d of [

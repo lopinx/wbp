@@ -41,7 +41,7 @@ if (d) {
   ok(d.site.categories, '包含站点分类');
   ok(d.keyword, '包含关键词');
   ok(d.keywordRow, '包含关键词行号');
-  ok(d.prompts.includes('波兰语'), '包含写作提示');
+  ok(d.prompts.includes('写作指令'), '包含写作提示');
   ok(d.products.length > 0, '包含产品列表');
   ok(Array.isArray(d.products), '产品字段为数组');
   ok(d.products.length <= 5, '产品数量不超过 5');

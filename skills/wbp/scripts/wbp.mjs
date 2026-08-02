@@ -5,7 +5,6 @@ import { join } from 'path';
 import { createHash, createHmac } from 'crypto';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
-const DATA_DIR = join(import.meta.dirname, '..', 'references');
 
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
 const asArray = x => Array.isArray(x) ? x : [x];
@@ -330,7 +329,7 @@ extensions = ["data/extensions/wiedza.md"]
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
   site.name = siteName;
 
-  const rp = (p) => p ? (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) ? p : join(DATA_DIR, p)) : null;
+  const rp = (p) => p ? (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) ? p : join(WP_DIR, p)) : null;
   const kwPaths = asArray(site.keywords).map(p => rp(p)).filter(Boolean);
   const prodPath = rp(site.products), promptPath = rp(site.prompts), extPaths = (site.extensions || []).map(p => rp(p));
 
