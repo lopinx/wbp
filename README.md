@@ -154,6 +154,7 @@ keywords = ["data/blog2-keywords.xlsx"]
 
 | 问题 | 解决方法 |
 |------|----------|
+| 图片搜索失败 | 检查 images.keys 配置是否正确，API key 是否有效 |
 | S3 列表失败 | 检查 AK/SK、Bucket、Region、Prefix、endpoint |
 | WP 认证失败 | 确认应用程序密码正确，用户有发布权限 |
 | WP API 返回 HTML | 检查 `site.url` 配置为 `/wp-json/wp/v2` |
@@ -170,6 +171,8 @@ wbp/
 ├── selftest.mjs         # 88 项自检测试
 ├── package.json         # ESM 模块
 ├── AGENTS.md            # AI 代理指引
+├── CLAUDE.md            # Claude Code 项目记忆
+├── README.md            # 完整文档
 ├── data/
 │   ├── keywords.xlsx    # 关键词池
 │   ├── products.xlsx    # 产品数据

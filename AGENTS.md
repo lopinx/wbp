@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-01 | Updated: 2026-08-01 -->
+<!-- Generated: 2026-08-01 | Updated: 2026-08-02 -->
 
 # wordpress-skills
 
@@ -9,11 +9,12 @@
 
 | 文件 | 说明 |
 |------|------|
-| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片混排、质量检查、去重检测、指数退避重试、缓存 |
+| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存 |
 | `install.mjs` | 一键安装脚本，智能检测本地已安装的 AI CLI，仅为检测到的工具创建命令文件 |
-| `selftest.mjs` | 88 项自动化测试，覆盖语法、TOML 解析（含边界情况）、去重哈希、图片混排、S3 函数、WP API 函数、错误处理、文档验证 |
+| `selftest.mjs` | 88 项自动化测试，覆盖语法、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证 |
 | `package.json` | Node.js 项目清单，依赖 xlsx 库 |
-| `setting.toml` | 多站点配置（关键词、产品、CDN/S3 设置） |
+| `CLAUDE.md` | Claude Code 项目记忆，含提交规范 |
+| `README.md` | 完整用户文档 |
 
 ## 子目录
 
@@ -29,6 +30,7 @@
 - **仅 ES 模块**：使用 `import`/`export`，通过 `node wbp.mjs` 直接运行
 - **跨平台路径**：使用 `path.join` 和 `os.homedir()` 兼容 Windows/Unix
 - **无构建步骤**：直接执行，无需转译
+- **提交规范**：每次任务完成使用 `rtk git` 提交到 GitHub
 
 ### 测试要求
 - `node --check wbp.mjs` 验证语法
@@ -41,7 +43,7 @@
 - WordPress REST API 基础认证（应用程序密码）
 - 通过段落位置重构实现图片混排
 - 质量验证：词数（60 波兰语）、段落（3）、H2（2）、标题（20）、摘要（50）、标签（2-10）、死链、内链（警告）
-- 四种图片模式：S3（混排）、图片搜索（Serper.dev）、CDN（直传）、媒体库（回退）
+- 四种图片模式：S3（混排）、图片搜索（Serper.dev 多 key 轮询）、CDN（直传）、媒体库（回退）
 
 ## 依赖关系
 

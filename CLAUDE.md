@@ -28,7 +28,7 @@
 ## 图片处理模式
 
 - **S3** — `mode = "s3"`，从 S3 兼容存储混排图片
-- **图片搜索** — `mode = "search"`，通过 Serper.dev API 搜索图片（配置 `[site.x.images]`）
+- **图片搜索** — `mode = "search"`，通过 Serper.dev API 搜索图片（配置 `[site.x.images]`，多 key 随机轮询）
 - **CDN** — `mode = "cdn"`，保留远程图片 URL
 - **媒体库** — 不配 cdn 节点，自动上传到 WP 媒体库
 
