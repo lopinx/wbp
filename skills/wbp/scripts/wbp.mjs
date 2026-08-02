@@ -264,11 +264,11 @@ async function checkQuality(title, content, excerpt, tags, site) {
   if (siteOrigin) {
     const internalLinks = [...(content || '').matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]).filter(u => u && u.startsWith(siteOrigin));
     if (internalLinks.length === 0) warnings.push('没有内部链接');
-    // 产品内链：排除首页与分类/标签聚合页，仅统计指向详情页的链接
+    // 内链：排除首页与分类/标签聚合页，仅统计指向详情页的链接
     const rootRe = new RegExp('^' + siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/?$');
     const navRe = new RegExp('^' + siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/(category|tag|tagi|kategoria|produkty|shop|blog)/?([^/]+/)?$');
     const productLinks = internalLinks.filter(u => !rootRe.test(u) && !navRe.test(u));
-    if (productLinks.length < 3) warnings.push(`产品内链不足 (${productLinks.length} 条，建议≥3)`);
+    if (productLinks.length < 3) warnings.push(`内链不足 (${productLinks.length} 条，建议≥3)`);
   }
   // ponytail: 关键词命中用标签作主关键词近似，文档级无 TF-IDF；升级可读 pick 的真实主关键词
   const kwList = asArray(tags || []).map(t => String(t).toLowerCase()).filter(t => t && t.length > 2);
@@ -306,8 +306,8 @@ async function main() {
   if (cmd === 'init') {
     writeFileSync(CFG, `# ~/.wbp/setting.toml
 [site.myblog]
-name = "我的博客"
-url = "https://example.com/wp-json/wp/v2"
+name = "BuchMistrz"
+url = "https://www.buchmistrz.com/wp-json/wp/v2"
 user = "admin"
 pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
 categories = [1, "news", "vape"]  # 支持数字ID或名称，多个分类
