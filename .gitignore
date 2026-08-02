@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config
+.wbp/
+
+# Test artifacts
+*.tmp
+*.temp
+
+# Debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+
+# OMC runtime state
+.omc/state/
+.omc/sessions/
+.omc/project-memory.json
+.omc/handoffs/
+.omc/logs/
+.omc/artifacts/
+.omc/plans/
+.omc/research/
+.omc/notepad.md
+.omc/ultragoal/
+
+# CodeGraph index
+.codegraph/
+
+# TypeScript
+*.tsbuildinfo
