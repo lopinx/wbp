@@ -104,8 +104,8 @@ prefix = "images/"
 #domain = "cdn.example.com"
 
 # 图片搜索 API（配合 cdn.mode="search" 使用）
-[site.mojblog.search]
-key = "your-serper-dev-api-key"
+[site.mojblog.images]
+keys = ["your-serper-dev-api-key-1", "your-serper-dev-api-key-2"]  # 随机轮询，可填多个
 gl = "pl"                # 国家代码，默认 pl（波兰）
 hl = "pl"                # 语言代码，默认 pl
 tbs = "qdr:w"            # 时间范围，默认过去一周

@@ -81,8 +81,10 @@ async function readExcel(p) {
 
 // ── 图片搜索（Serper.dev / 兼容 API）──
 async function searchImages(cfg, tags, title) {
-  const { key, gl = 'pl', hl = 'pl', tbs = 'qdr:w' } = cfg;
-  if (!key) { console.warn('  ⚠ 未配置图片搜索 API key'); return []; }
+  const keys = cfg.keys || (cfg.key ? [cfg.key] : []);
+  if (!keys.length) { console.warn('  ⚠ 未配置 images.keys'); return []; }
+  const key = keys[Math.floor(Math.random() * keys.length)];
+  const { gl = 'pl', hl = 'pl', tbs = 'qdr:w' } = cfg;
   const keep = (tags || []).filter(t => t.length > 2 && !/^\d+\s*(in|pack|pcs|set|pairs?|stk|ctn|box|bag|roll|sheets?|ml|g|kg|cm|mm|inch)/i.test(t));
   const q = [...keep, title].filter(Boolean).join(' ');
   const truncated = Array.from(q).slice(0, 100).join('');
@@ -305,7 +307,7 @@ extensions = ["data/extensions/wiedza.md"]
 #
 # 图片搜索 API（配合 cdn.mode="search" 使用）
 #[site.myblog.images]
-#key = "your-serper-dev-api-key"
+#keys = ["your-serper-dev-api-key-1", "your-serper-dev-api-key-2"]  # 随机轮询
 #gl = "pl"                # 国家代码，默认 pl（波兰）
 #hl = "pl"                # 语言代码，默认 pl
 #tbs = "qdr:w"            # 时间范围，默认过去一周
@@ -343,7 +345,7 @@ extensions = ["data/extensions/wiedza.md"]
     let images = [];
     if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); } }
     const safe = site.images ? { ...site.images, key: undefined } : null;
-    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, search: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
+    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
     return;
   }
 
