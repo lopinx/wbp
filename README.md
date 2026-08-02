@@ -165,20 +165,21 @@ keywords = ["data/blog2-keywords.xlsx"]
 ## 开发指南
 
 ```
-wbp/
-├── SKILL.md             # 技能定义
-├── scripts/
-│   ├── wbp.mjs          # 核心 CLI
-│   ├── install.mjs      # 一键安装脚本
-│   └── __TEST__/
-│       └── selftest.mjs # 88 项自检测试
-├── references/
-│   └── data/
-│       ├── keywords.xlsx    # 关键词池
-│       ├── products.xlsx    # 产品数据
-│       ├── prompts.md       # 写作指令
-│       └── extensions/
-│           └── wiedza.md    # 行业知识
+wordpress-skills/
+├── skills/wbp/
+│   ├── SKILL.md             # 技能定义
+│   ├── scripts/
+│   │   ├── wbp.mjs          # 核心 CLI
+│   │   ├── install.mjs      # 一键安装脚本
+│   │   └── __TEST__/
+│   │       └── selftest.mjs # 88 项自检测试
+│   └── references/
+│       └── data/
+│           ├── keywords.xlsx    # 关键词池
+│           ├── products.xlsx    # 产品数据
+│           ├── prompts.md       # 写作指令
+│           └── extensions/
+│               └── wiedza.md    # 行业知识
 ├── package.json         # ESM 模块
 ├── AGENTS.md            # AI 代理指引
 ├── CLAUDE.md            # Claude Code 项目记忆
@@ -199,7 +200,7 @@ node --check wbp.mjs # 语法检查
 2. 在项目根目录运行：
 
 ```bash
-zip -r wbp-skill.zip wbp.skill.md README.md AGENTS.md CLAUDE.md wbp.mjs install.mjs selftest.mjs data/ package.json
+zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wbp/scripts/wbp.mjs skills/wbp/scripts/install.mjs skills/wbp/scripts/__TEST__/selftest.mjs skills/wbp/references/data/ package.json
 ```
 
 3. 生成的 `wbp-skill.zip` 文件即可分发或导入到 AI 工具的技能目录中。

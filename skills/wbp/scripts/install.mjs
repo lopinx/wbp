@@ -77,7 +77,7 @@ if (existsSync(DATA_SRC)) {
     for (const f of readdirSync(src)) {
       const s = join(src, f), d = join(dst, f);
       if (statSync(s).isDirectory()) cp(s, d);
-      else writeFileSync(d, readFileSync(s));
+      else if (!existsSync(d)) writeFileSync(d, readFileSync(s));
     }
   };
   cp(DATA_SRC, DATA_DST);
@@ -94,8 +94,10 @@ for (const d of [
   if (!existsSync(d)) mkdirSync(d, { recursive: true });
 }
 
-// ── 创建示例提示文档 ──
-writeFileSync(join(WP_DIR, 'data', 'prompts.md'), `# 写作指令
+// ── 创建示例提示文档（仅当文件不存在时）──
+const promptsPath = join(WP_DIR, 'data', 'prompts.md');
+if (!existsSync(promptsPath)) {
+  writeFileSync(promptsPath, `# 写作指令
 
 ## 文章风格
 - 专业但不晦涩，适当使用行业术语
@@ -112,9 +114,12 @@ writeFileSync(join(WP_DIR, 'data', 'prompts.md'), `# 写作指令
 - 摘要 120-160 字
 - 标签 3-5 个
 `, 'utf-8');
+}
 
-// ── 创建示例扩展 ──
-writeFileSync(join(WP_DIR, 'data', 'extensions', 'knowledge.md'), `# 领域知识
+// ── 创建示例扩展（仅当文件不存在时）──
+const knowledgePath = join(WP_DIR, 'data', 'extensions', 'knowledge.md');
+if (!existsSync(knowledgePath)) {
+  writeFileSync(knowledgePath, `# 领域知识
 
 ## 行业术语
 - 保持专业度
@@ -124,28 +129,35 @@ writeFileSync(join(WP_DIR, 'data', 'extensions', 'knowledge.md'), `# 领域知�
 - 避免过度营销
 - 引用来源
 `, 'utf-8');
+}
 
-// ── 创建示例 keywords.xlsx + products.xlsx ──
+// ── 创建示例 keywords.xlsx + products.xlsx（仅当文件不存在时）──
 const xlsx = await import('xlsx');
 const { utils } = xlsx;
 const writeXLSX = xlsx.default ? xlsx.default.writeFile : xlsx.writeFile;
 
-const wb = utils.book_new();
-utils.book_append_sheet(wb, utils.json_to_sheet([
-  { keyword: '人工智能趋势' },
-  { keyword: 'Python入门指南' },
-  { keyword: 'Web开发最佳实践' },
-  { keyword: '云计算架构' },
-  { keyword: '数据安全' }
-]), 'keywords');
-writeXLSX(wb, join(WP_DIR, 'data', 'keywords.xlsx'));
+const keywordsPath = join(WP_DIR, 'data', 'keywords.xlsx');
+if (!existsSync(keywordsPath)) {
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, utils.json_to_sheet([
+    { keyword: '人工智能趋势' },
+    { keyword: 'Python入门指南' },
+    { keyword: 'Web开发最佳实践' },
+    { keyword: '云计算架构' },
+    { keyword: '数据安全' }
+  ]), 'keywords');
+  writeXLSX(wb, keywordsPath);
+}
 
-const wb2 = utils.book_new();
-utils.book_append_sheet(wb2, utils.json_to_sheet([
-  { name: '产品A', price: 99, desc: '基础版' },
-  { name: '产品B', price: 199, desc: '高级版' }
-]), 'products');
-writeXLSX(wb2, join(WP_DIR, 'data', 'products.xlsx'));
+const productsPath = join(WP_DIR, 'data', 'products.xlsx');
+if (!existsSync(productsPath)) {
+  const wb2 = utils.book_new();
+  utils.book_append_sheet(wb2, utils.json_to_sheet([
+    { name: '产品A', price: 99, desc: '基础版' },
+    { name: '产品B', price: 199, desc: '高级版' }
+  ]), 'products');
+  writeXLSX(wb2, productsPath);
+}
 
 // ── 生成 AI 工具命令文件 ──
 const wpPath = WP_DIR.replace(/\\/g, '/');

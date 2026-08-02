@@ -18,9 +18,9 @@
 
 | 文件 | 说明 |
 |------|------|
-| `wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试 |
-| `install.mjs` | 一键安装脚本，自动检测 AI CLI 创建命令文件 |
-| `selftest.mjs` | 88 项自动化测试 |
+| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试 |
+| `skills/wbp/scripts/install.mjs` | 一键安装脚本，自动检测 AI CLI 创建命令文件 |
+| `skills/wbp/scripts/__TEST__/selftest.mjs` | 88 项自动化测试 |
 | `package.json` | ESM 模块，依赖 xlsx |
 | `AGENTS.md` | AI 代理指引 |
 | `README.md` | 完整文档 |

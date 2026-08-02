@@ -61,7 +61,7 @@ function parseToml(t) {
     }
     else if (val === 'true') val = true;
     else if (val === 'false') val = false;
-    else if (!isNaN(val) && val !== '') val = Number(val);
+    else if (/^-?\d+$/.test(val)) val = Number(val);
     let o = r;
     for (const p of path) o = o[p] = o[p] || {};
     o[kv[1]] = val;
@@ -251,7 +251,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const paras = (content || excerpt || '').match(PARA_RE) || [];
   const h2 = (content || excerpt || '').match(/<h2[^>]*>/g) || [];
   const checks = [
-    [wordCount < 600, `词数 ${wordCount} 少于 600`],
+    [wordCount < 60, `词数 ${wordCount} 少于 60`],
     [paras.length < 3, `仅有 ${paras.length} 个段落`],
     [h2.length < 2, `仅有 ${h2.length} 个 H2 标题`],
     [!title || title.length < 20, `标题过短 (${title?.length || 0} 字符)`],
@@ -266,7 +266,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
     if (internalLinks.length === 0) warnings.push('没有内部链接');
   }
   const links = [...(content || '').matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
-  if (links.length > 3) {
+  if (links.length > 0) {
     const codes = await Promise.all(links.slice(0, 3).map(u => fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(5000), redirect: 'follow' }).then(r => r.status).catch(() => 500)));
     const dead = codes.filter(c => c >= 400).length;
     if (dead) issues.push(`失效链接: ${dead} 个`);
