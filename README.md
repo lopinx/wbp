@@ -18,7 +18,6 @@
 | **OpenCode** | `/wbp` | `~/.config/opencode/commands/wbp.md` |
 | **Hermes** | `/wbp` | `~/.hermes/commands/wbp.md` |
 | **OpenClaw** | `/wbp` | `~/.openclaw/commands/wbp.md` |
-| **Trae Work (SOLO)** | `/wbp` | `~/.trae/rules/wbp.md` |
 
 ### 核心工作流
 
@@ -38,28 +37,7 @@ node install.mjs      # 自动检测 AI CLI 并创建命令文件
 node wbp.mjs init     # 生成配置模板
 ```
 
-安装脚本自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw、Trae Work (SOLO)），仅为已安装的工具创建命令文件。
-
-### 手动安装到 Trae Work (SOLO)
-
-Trae Work (SOLO) 是字节跳动出品的 AI IDE，其自定义规则文件存放在 `~/.trae/rules/` 目录。
-
-```bash
-# 创建规则目录
-mkdir -p ~/.trae/rules
-
-# 写入 wbp 规则
-cat > ~/.trae/rules/wbp.md << 'EOF'
-# WordPress Publisher
-
-1. Run `node ~/.wbp/wbp.mjs pick` → keyword + config
-2. Write Chinese blog post (title, excerpt, tags, HTML)
-3. Save to ~/.wbp/_draft.json
-4. Run `node ~/.wbp/wbp.mjs publish`
-EOF
-```
-
-在 Trae Work (SOLO) 中，通过 `/wbp` 命令即可调用发布工作流。
+安装脚本自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw），仅为已安装的工具创建命令文件。
 
 ### npx 直接运行（无需安装）
 
@@ -197,14 +175,6 @@ wbp/
 node selftest.mjs    # 87/87 通过
 node --check wbp.mjs # 语法检查
 ```
-
-### Trae Work (SOLO) 工作流
-
-在 Trae Work (SOLO) 中输入 `/wbp` 即可自动执行发布流程：
-
-1. `/wbp` → 自动运行 `wbp.mjs pick` 选取关键词
-2. 等待 AI 参考指令撰写文章
-3. 运行 `node ~/.wbp/wbp.mjs publish` 发布到 WordPress
 
 ## 许可
 
