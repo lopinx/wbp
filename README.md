@@ -61,7 +61,7 @@ npx github:lopinx/wbp init
 npm start        # node wbp.mjs
 npm run init     # node wbp.mjs init
 npm run pick     # node wbp.mjs pick
-npm run test     # 87 项自检测试
+npm run test     # 88 项自检测试
 ```
 
 ### 草稿 JSON 格式
@@ -167,7 +167,7 @@ keywords = ["data/blog2-keywords.xlsx"]
 wbp/
 ├── wbp.mjs              # 核心 CLI (371 行)
 ├── install.mjs          # 一键安装脚本
-├── selftest.mjs         # 87 项自检测试
+├── selftest.mjs         # 88 项自检测试
 ├── package.json         # ESM 模块
 ├── AGENTS.md            # AI 代理指引
 ├── data/
@@ -181,7 +181,7 @@ wbp/
 ```
 
 ```bash
-node selftest.mjs    # 87/87 通过
+node selftest.mjs    # 88/88 通过
 node --check wbp.mjs # 语法检查
 ```
 
