@@ -79,6 +79,20 @@ async function readExcel(p) {
   return x.utils.sheet_to_json(ws);
 }
 
+// ── 图片搜索（Serper.dev / 兼容 API）──
+async function searchImages(cfg, query) {
+  const { key, count = 5 } = cfg;
+  if (!key) { console.warn('  ⚠ 未配置图片搜索 API key'); return []; }
+  const res = await fetchWithRetry('https://google.serper.dev/images', {
+    method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q: query?.slice(0, 100) || '', num: Math.min(count, 10) })
+  });
+  if (!res.ok) { console.warn(`  图片搜索失败: ${res.status}`); return []; }
+  const data = await res.json();
+  return (data.images || []).map(i => i.imageUrl).filter(Boolean);
+}
+
 // ── S3 SigV4 + 重试 ──
 async function fetchWithRetry(url, opts, retries = 3) {
   for (let i = 0; i <= retries; i++) {
@@ -266,10 +280,11 @@ products = "data/products.xlsx"
 prompts = "data/prompts.md"
 extensions = ["data/extensions/wiedza.md"]
 
-# 三种图片模式（选其一）：
+# 四种图片模式（选其一）：
 # 1) S3 兼容 — mode="s3" 拉图池混排，endpoint 可选
-# 2) CDN — mode="cdn" 远程URL原样保留
-# 3) 不配 cdn 节点 → 自动上传到媒体库
+# 2) 图片搜索 — mode="search" 通过 Serper.dev 等 API 搜索图片
+# 3) CDN — mode="cdn" 远程URL原样保留
+# 4) 不配 cdn 节点 → 自动上传到媒体库
 #[site.myblog.cdn]
 #mode = "s3"
 #bucket = "my-bucket"
@@ -281,6 +296,11 @@ extensions = ["data/extensions/wiedza.md"]
 # 支持：Cloudflare R2 / Amazon S3 / Kodo / MinIO / Ceph / 任意 S3 兼容存储
 #endpoint = "https://s3.us-east-1.qiniucs.com"
 #domain = "cdn.example.com"
+#
+# 图片搜索 API（配合 cdn.mode="search" 使用）
+#[site.myblog.search]
+#key = "your-serper-dev-api-key"
+#query = ""              # 可选，默认使用文章标题
 `, 'utf-8');
     console.log('示例配置文件已创建于', CFG);
     return;
@@ -313,7 +333,7 @@ extensions = ["data/extensions/wiedza.md"]
     for (const ep of extPaths) { if (existsSync(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
     let images = [];
     if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); } }
-    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
+    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, search: site.search || null }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
     return;
   }
 
@@ -342,10 +362,21 @@ extensions = ["data/extensions/wiedza.md"]
 
     let finalContent = content || excerpt;
     const cm = site.cdn && site.cdn.mode;
+
     if (cm === 's3') {
       let images = [];
       try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); }
       if (images.length) finalContent = mixImages(finalContent, images);
+    } else if (cm === 'search') {
+      console.log('正在搜索图片...');
+      const searchCfg = site.search || {};
+      if (searchCfg.key) {
+        const searchQuery = draft.searchQuery || site.search?.query || title;
+        let images = await searchImages(searchCfg, searchQuery);
+        if (images.length) finalContent = mixImages(finalContent, images);
+      } else {
+        console.warn('  ⚠ 未配置 search.key，跳过图片搜索');
+      }
     } else if (cm === 'cdn') {
       console.log('纯 CDN 模式 — 远程图片 URL 保持不变');
     } else {

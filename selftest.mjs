@@ -146,9 +146,10 @@ console.log('\n## 7. 质量检查函数');
 const qcFn = src.match(/async function checkQuality[\s\S]*?\n\}/);
 ok(!!qcFn, 'checkQuality 已定义');
 
-// ── 8. S3 函数 ──
-console.log('\n## 8. S3 函数');
+// ── 8. 图片函数 ──
+console.log('\n## 8. 图片函数');
 ok(src.includes('async function s3List'), 's3List 已定义');
+ok(src.includes('async function searchImages'), 'searchImages 已定义');
 ok(src.includes('fetchWithRetry'), 'fetchWithRetry 已定义');
 ok(src.includes('uriEncode('), 'uriEncode 已定义');
 

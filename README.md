@@ -102,6 +102,11 @@ prefix = "images/"
 # endpoint 可选，不填则自动使用 AWS S3 地址
 #endpoint = "https://s3.us-east-1.qiniucs.com"
 #domain = "cdn.example.com"
+
+	# 图片搜索 API（配合 cdn.mode="search" 使用）
+	[site.mojblog.search]
+	key = "your-serper-dev-api-key"
+	#query = ""              # 可选，默认使用文章标题
 ```
 
 ### 多站点配置
@@ -125,6 +130,7 @@ keywords = ["data/blog2-keywords.xlsx"]
 | 模式 | 配置 | 行为 |
 |------|------|------|
 | **S3 兼容** | `mode = "s3"` + endpoint（可选） | 从任意 S3 兼容存储（AWS/七牛/MinIO/Ceph）列出图片，随机混排插入段落间 |
+| **图片搜索** | `mode = "search"` + `[search]` 节 | 通过 Serper.dev 等 API 搜索图片，随机混排插入段落间 |
 | **CDN 直传** | `mode = "cdn"` + domain | 保留远程图片 URL |
 | **媒体库** | 不配置 cdn 节点 | 自动下载外部图片上传到 WP 媒体库，替换 URL |
 
