@@ -77,7 +77,7 @@ npx github:lopinx/wbp init
 npm start        # node wbp.mjs
 npm run init     # node wbp.mjs init
 npm run pick     # node wbp.mjs pick
-npm run test     # 88 项自检测试
+npm run test     # 78 项自检测试
 ```
 
 ### 草稿 JSON 格式
@@ -86,7 +86,7 @@ npm run test     # 88 项自检测试
 {
   "title": "文章标题（40-70 字符，波兰语）",
   "excerpt": "摘要 120-160 字符，包含主要关键词",
-  "content": "<p>引言段落...</p><h2>小标题</h2><p>正文...</p><p>总结...</p>",
+  "content": "<p>引言段落...</p><h3>小标题</h3><p>正文...</p><p>总结...</p>",
   "tags": ["标签1", "标签2", "标签3"]
 }
 ```
@@ -188,7 +188,7 @@ wordpress-skills/
 │   │   ├── wbp.mjs          # 核心 CLI
 │   │   ├── install.mjs      # 一键安装脚本
 │   │   └── __TEST__/
-│   │       └── selftest.mjs # 88 项自检测试
+│   │       └── selftest.mjs # 78 项自检测试
 │   └── references/
 │       └── data/
 │           ├── keywords.xlsx    # 关键词池
@@ -204,7 +204,7 @@ wordpress-skills/
 ```
 
 ```bash
-node selftest.mjs    # 88/88 通过
+node selftest.mjs    # 76/78 通过
 node --check wbp.mjs # 语法检查
 ```
 

@@ -20,7 +20,7 @@
 |------|------|
 | `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试 |
 | `skills/wbp/scripts/install.mjs` | 一键安装脚本，自动检测 AI CLI 创建命令文件 |
-| `skills/wbp/scripts/__TEST__/selftest.mjs` | 88 项自动化测试 |
+| `skills/wbp/scripts/__TEST__/selftest.mjs` | 78 项自动化测试 |
 | `package.json` | ESM 模块，依赖 xlsx |
 | `AGENTS.md` | AI 代理指引 |
 | `README.md` | 完整文档 |
@@ -43,7 +43,7 @@
 ## 测试
 
 - `node --check wbp.mjs` 语法检查
-- `node selftest.mjs` 运行 88 项测试
+- `node selftest.mjs` 运行 78 项测试
 - 测试覆盖：语法、init、pick、TOML 解析、去重（含 CJK）、图片混排、图片函数、WP API、错误处理、文档验证
 
 ## 代码约定

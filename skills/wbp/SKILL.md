@@ -37,7 +37,7 @@ node C:/Users/Administrator/.wbp/wbp.mjs pick
 {
   "title": "文章标题（40-70字符）",
   "excerpt": "摘要（120-160字符）",
-  "content": "<p>HTML内容</p><h2>小标题</h2><p>...</p>",
+  "content": "<p>HTML内容</p><h3>小标题</h3><p>...</p>",
   "tags": ["标签1", "标签2", "标签3"]
 }
 ```
@@ -63,7 +63,7 @@ node C:/Users/Administrator/.wbp/wbp.mjs publish C:/Users/Administrator/.wbp/_dr
 
 ### 内容结构
 1. **Wstęp**（引言 1-2段）：hook 式开头
-2. **Rozwinięcie**（主体 3-5 个小标题 H2）
+2. **Rozwinięcie**（主体 3-5 个小标题 H3）
 3. **Podsumowanie**（总结 1段 + CTA）
 
 ### SEO 要求
@@ -73,14 +73,17 @@ node C:/Users/Administrator/.wbp/wbp.mjs publish C:/Users/Administrator/.wbp/_dr
 - 800-1500 słów
 
 ## 质量检查标准
-- 词数 ≥ 60（波兰语）
-- 段落数 ≥ 3
-- H2 标题 ≥ 2
-- 标题长度 ≥ 20 字符
+- 词数 ≥ 600（波兰语）
+- 段落数 ≥ 8
+- H3标题 ≥ 3
+- 标题长度 ≥ 10 字符
 - 摘要长度 ≥ 50 字符
-- 标签数 2-10 个
+- 标签数 3-10 个
 - 死链检查
 - 内链警告
+- 产品内链 ≥ 3（指向站内产品/分类详情页，锚文本含关键词）
+- 关键词密度：主词 5-8 次，次词 2-4 次
+- E-E-A-T 外部权威外链 ≥ 1（指向政府/行业机构/权威媒体）
 
 ## 图片处理模式
 | 模式 | 配置 | 行为 |
