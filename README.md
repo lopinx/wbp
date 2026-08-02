@@ -106,7 +106,10 @@ prefix = "images/"
 	# 图片搜索 API（配合 cdn.mode="search" 使用）
 	[site.mojblog.search]
 	key = "your-serper-dev-api-key"
-	#query = ""              # 可选，默认使用文章标题
+	gl = "pl"                # 国家代码，默认 pl（波兰）
+	hl = "pl"                # 语言代码，默认 pl
+	tbs = "qdr:w"            # 时间范围，默认过去一周
+	#query = ""               # 可选，默认使用文章标题
 ```
 
 ### 多站点配置

@@ -80,24 +80,30 @@ async function readExcel(p) {
 }
 
 // ── 图片搜索（Serper.dev / 兼容 API）──
-async function searchImages(cfg, query) {
-  const { key, count = 5 } = cfg;
+async function searchImages(cfg, tags, title) {
+  const { key, gl = 'pl', hl = 'pl', tbs = 'qdr:w' } = cfg;
   if (!key) { console.warn('  ⚠ 未配置图片搜索 API key'); return []; }
+  const keep = (tags || []).filter(t => t.length > 2 && !/^\d+\s*(in|pack|pcs|set|pairs?|stk|ctn|box|bag|roll|sheets?|ml|g|kg|cm|mm|inch)/i.test(t));
+  const q = [...keep, title].filter(Boolean).join(' ');
+  const truncated = Array.from(q).slice(0, 100).join('');
   const res = await fetchWithRetry('https://google.serper.dev/images', {
-    method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS),
+    method: 'POST',
     headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ q: query?.slice(0, 100) || '', num: Math.min(count, 10) })
+    body: JSON.stringify({ q: truncated, gl, hl, tbs })
   });
   if (!res.ok) { console.warn(`  图片搜索失败: ${res.status}`); return []; }
-  const data = await res.json();
-  return (data.images || []).map(i => i.imageUrl).filter(Boolean);
+  let data;
+  try { data = await res.json(); } catch { console.warn('  图片搜索响应解析失败'); return []; }
+  if (!data.images || !data.images.length) { console.warn('  图片搜索返回空结果，可能 API 响应格式已变更'); return []; }
+  return data.images.map(i => i.imageUrl).filter(u => u && /^https?:\/\//.test(u));
 }
 
 // ── S3 SigV4 + 重试 ──
 async function fetchWithRetry(url, opts, retries = 3) {
+  const timeout = opts?.signal ? undefined : TIMEOUT_MS;
   for (let i = 0; i <= retries; i++) {
     try {
-      const res = await fetch(url, opts);
+      const res = await fetch(url, { ...opts, signal: timeout ? AbortSignal.timeout(timeout) : opts.signal });
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i < retries) { const d = 1000 * Math.pow(2, i) + Math.random() * 200; console.warn(`  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d)); }
       else return res;
@@ -300,7 +306,10 @@ extensions = ["data/extensions/wiedza.md"]
 # 图片搜索 API（配合 cdn.mode="search" 使用）
 #[site.myblog.search]
 #key = "your-serper-dev-api-key"
-#query = ""              # 可选，默认使用文章标题
+#gl = "pl"                # 国家代码，默认 pl（波兰）
+#hl = "pl"                # 语言代码，默认 pl
+#tbs = "qdr:w"            # 时间范围，默认过去一周
+#query = ""               # 可选，默认使用文章标题
 `, 'utf-8');
     console.log('示例配置文件已创建于', CFG);
     return;
@@ -333,7 +342,8 @@ extensions = ["data/extensions/wiedza.md"]
     for (const ep of extPaths) { if (existsSync(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
     let images = [];
     if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); } }
-    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, search: site.search || null }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
+    const safe = site.search ? { ...site.search, key: undefined } : null;
+    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, search: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
     return;
   }
 
@@ -369,14 +379,8 @@ extensions = ["data/extensions/wiedza.md"]
       if (images.length) finalContent = mixImages(finalContent, images);
     } else if (cm === 'search') {
       console.log('正在搜索图片...');
-      const searchCfg = site.search || {};
-      if (searchCfg.key) {
-        const searchQuery = draft.searchQuery || site.search?.query || title;
-        let images = await searchImages(searchCfg, searchQuery);
-        if (images.length) finalContent = mixImages(finalContent, images);
-      } else {
-        console.warn('  ⚠ 未配置 search.key，跳过图片搜索');
-      }
+      try { const images = await searchImages(site.search || {}, tags, title); if (images.length) finalContent = mixImages(finalContent, images); }
+      catch (e) { console.warn('  图片搜索失败:', e.message); }
     } else if (cm === 'cdn') {
       console.log('纯 CDN 模式 — 远程图片 URL 保持不变');
     } else {
