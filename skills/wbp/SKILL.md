@@ -87,7 +87,8 @@ node C:/Users/Administrator/.wbp/wbp.mjs publish C:/Users/Administrator/.wbp/_dr
 ## 图片处理模式
 | 模式 | 配置 | 行为 |
 |------|------|------|
-| S3 | `mode = "s3"` | 从 S3 列出图片，随机混排插入段落间 |
+| S3 | `mode = "s3"` | 从 S3 兼容存储列出图片，随机混排插入段落间 |
+| 图片搜索 | `mode = "search"` | 通过 Serper.dev 等 API 搜索图片（多 key 随机轮询），混排插入段落间 |
 | CDN | `mode = "cdn"` | 保留内容中的远程图片 URL 不变 |
 | 媒体库 | 无 cdn 配置 | 下载外部图片上传到 WP 媒体库，替换 URL |
 

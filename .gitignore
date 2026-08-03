@@ -49,3 +49,4 @@ coverage/
 
 # Documents
 package.json
+!skills/wbp/scripts/package.json

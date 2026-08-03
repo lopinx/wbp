@@ -77,7 +77,7 @@ npx github:lopinx/wbp init
 npm start        # node wbp.mjs
 npm run init     # node wbp.mjs init
 npm run pick     # node wbp.mjs pick
-npm run test     # 78 项自检测试
+npm run test     # 97 项自检测试
 ```
 
 ### 草稿 JSON 格式
@@ -188,7 +188,7 @@ wordpress-skills/
 │   │   ├── wbp.mjs          # 核心 CLI
 │   │   ├── install.mjs      # 一键安装脚本
 │   │   └── __TEST__/
-│   │       └── selftest.mjs # 78 项自检测试
+│   │       └── selftest.mjs # 97 项自检测试
 │   └── references/
 │       └── data/
 │           ├── keywords.xlsx    # 关键词池

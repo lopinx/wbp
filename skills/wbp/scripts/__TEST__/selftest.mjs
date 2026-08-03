@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // selftest.mjs — wbp.mjs 自检（增强版）
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
@@ -8,8 +8,7 @@ import { createHash } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_DIR = join(__dirname, '..');
-const ROOT_DIR = join(SCRIPT_DIR, '..', '..');
-const REF_DATA_DIR = join(ROOT_DIR, 'skills', 'wbp', 'references', 'data');
+const REF_DATA_DIR = join(SCRIPT_DIR, '../references/data'); // 与第 13 节数据文件检查一致：skills/wbp/references/data
 const HOME = process.env.HOME || process.env.USERPROFILE;
 const WP_DIR = join(HOME, '.wbp');
 
@@ -28,6 +27,26 @@ ok(run('--check', [join(__dirname, 'selftest.mjs')]).status === 0, 'selftest.mjs
 console.log('\n## 2. 初始化');
 ok(run('wbp.mjs', ['init']).status === 0, 'init 退出码为 0');
 ok(existsSync(join(WP_DIR, 'setting.toml')), 'setting.toml 已创建');
+
+// 准备测试数据：把仓库 references/data 复制到 ~/.wbp/data（init 不复制数据，
+// pick 的相对路径解析到 ~/.wbp/data；未跑 install 的开发环境会缺数据）。
+// ponytail: 仅复制引用数据（keywords/products/prompts/extensions），与 install.mjs 语义一致
+function syncRefData() {
+  if (!existsSync(REF_DATA_DIR)) return;
+  const dst = join(WP_DIR, 'data');
+  if (!existsSync(dst)) mkdirSync(dst, { recursive: true });
+  for (const f of readdirSync(REF_DATA_DIR)) {
+    const s = join(REF_DATA_DIR, f), d = join(dst, f);
+    if (statSync(s).isDirectory()) {
+      if (!existsSync(d)) mkdirSync(d, { recursive: true });
+      for (const sub of readdirSync(s)) copyFileSync(join(s, sub), join(d, sub));
+    } else {
+      copyFileSync(s, d);
+    }
+  }
+}
+syncRefData();
+ok(existsSync(join(WP_DIR, 'data', 'keywords.xlsx')), '测试数据已就位');
 
 // ── 3. 选择关键词 ──
 console.log('\n## 3. 选择关键词');

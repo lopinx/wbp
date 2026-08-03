@@ -11,8 +11,8 @@
 |------|------|
 | `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存 |
 | `install.mjs` | 一键安装脚本，智能检测本地已安装的 AI CLI，仅为检测到的工具创建命令文件 |
-| `selftest.mjs` | 78 项自动化测试，覆盖语法、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证 |
-| `package.json` | Node.js 项目清单，依赖 xlsx 库 |
+| `selftest.mjs` | 97 项自动化测试，覆盖语法、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证 |
+| `package.json` | Node.js 项目清单，依赖 exceljs 库 |
 | `CLAUDE.md` | Claude Code 项目记忆，含提交规范 |
 | `README.md` | 完整用户文档 |
 
@@ -34,7 +34,7 @@
 
 ### 测试要求
 - `node --check wbp.mjs` 验证语法
-- `node selftest.mjs` 运行完整测试套件（88 项）
+- `node selftest.mjs` 运行完整测试套件（97 项）
 - 测试覆盖：语法、init、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留）、图片函数、WP API 函数、helper 函数、错误处理、文档验证、数据文件完整性、错误边界
 
 ### 常用模式
@@ -54,6 +54,6 @@
 - `data/extensions/` - 扩展知识文件（wiedza.md）
 
 ### 外部
-- `xlsx` (npm) - Excel 文件读取，通过 sheet_to_json
+- `exceljs` (npm) - Excel 文件读取，通过 eachRow
 
 <!-- MANUAL: 核心工具是 wbp.mjs，其他文件均为辅助工具。设计目标为单命令跨 5 个 AI 平台运行。 -->

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, writeSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { createHash, createHmac } from 'crypto';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
@@ -36,48 +36,42 @@ function log(level, message, data = {}, skipPrefix = false) {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
 
-  // 输出到控制台
-  const finalData = data || {};
-  if (level === 'error') {
-    if (skipPrefix) {
-      console.error(message, finalData);
-    } else {
-      console.error(`${prefix} ${message}`, finalData);
-    }
-  } else if (level === 'warn') {
-    if (skipPrefix) {
-      console.warn(message, finalData);
-    } else {
-      console.warn(`${prefix} ${message}`, finalData);
-    }
+  // 同步写入 stderr/stdout，避免 process.exit 异步 flush 丢失输出。
+  // ponytail: 直接 writeSync 而非 console，Windows+Node 下 console.error 在 exit 前可能不 flush
+  const hasData = data && typeof data === 'object' && Object.keys(data).length > 0;
+  const line = skipPrefix ? `${message}${hasData ? ' ' + JSON.stringify(data) : ''}` : `${prefix} ${message}${hasData ? ' ' + JSON.stringify(data) : ''}`;
+  if (level === 'error' || level === 'warn') {
+    writeSync(2, line + '\n');
   } else {
-    if (skipPrefix) {
-      console.log(message, finalData);
-    } else {
-      console.log(`${prefix} ${message}`, finalData);
-    }
+    writeSync(1, line + '\n');
   }
+}
+
+/**
+ * 同步输出错误后立即退出，确保用户在 Windows/快速退出下仍能看到消息。
+ * ponytail: 替代散落的 log('error',...) + process.exit(1) 模式
+ */
+function die(msg, code = 1) {
+  try { writeSync(2, String(msg) + '\n'); } catch {}
+  process.exit(code);
 }
 
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
 const asArray = x => Array.isArray(x) ? x : [x];
 
 /**
- * 安全路径验证函数
- * 防止目录遍历攻击，确保路径在允许的目录内
+ * 安全路径解析：相对路径挂到 ~/.wbp 并防目录遍历，绝对路径放行。
+ * ponytail: 仅对相对路径做 WP_DIR 越界检查 —— 配置约定相对路径相对 ~/.wbp；
+ *   绝对路径（如仓库内数据文件）是合法用例，不受 WP_DIR 约束。
  */
 function safePath(p) {
   if (!p) return null;
-
-  // 使用 path.resolve 解析相对路径
-  const resolved = resolve(p);
-
-  // 检查路径是否在允许的目录内（防止 ../ 攻击）
-  if (!resolved.startsWith(WP_DIR)) {
-    throw new Error(`路径不在允许的目录内: ${p} (解析为: ${resolved})`);
+  const isAbs = p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+  const abs = isAbs ? resolve(p) : resolve(WP_DIR, p);
+  if (!isAbs && !abs.startsWith(WP_DIR)) {
+    throw new Error(`路径越界 ~/.wbp: ${p} (解析为 ${abs})`);
   }
-
-  return resolved;
+  return abs;
 }
 
 // 验证键名是否安全（防止原型污染）
@@ -351,6 +345,17 @@ async function checkDuplicate(site, title) {
   return posts.find(p => p.title && p.title.rendered === title) || null;
 }
 
+/**
+ * 解析分类配置：数字 ID 原样保留，名称经 findOrCreate 转为 ID。
+ * ponytail: 分类既可填 1 也可填 "news"，统一 Promise.all 并行求值
+ */
+async function resolveCategoryIds(site, cats) {
+  return Promise.all(asArray(cats).map(c => {
+    const isId = typeof c === 'number' || /^\d+$/.test(String(c));
+    return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache);
+  }));
+}
+
 // ── 图片混排 ──
 function mixImages(html, images) {
   if (!images.length) return html;
@@ -467,23 +472,22 @@ extensions = ["data/extensions/wiedza.md"]
     return;
   }
 
-  if (!existsSync(CFG)) { log('error', '未找到配置文件。请运行: node wbp.mjs init'); process.exit(1); }
+  if (!existsSync(CFG)) { die('未找到配置文件。请运行: node wbp.mjs init'); }
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {};
   const siteNames = Object.keys(sites);
-  if (!siteNames.length) { log('error', '未配置任何站点'); process.exit(1); }
+  if (!siteNames.length) { die('未配置任何站点'); }
 
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
   site.name = siteName;
 
-  const rp = (p) => p ? (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) ? p : join(WP_DIR, p)) : null;
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean);
   const prodPath = safePath(site.products), promptPath = safePath(site.prompts), extPaths = (site.extensions || []).map(p => safePath(p));
 
   if (cmd === 'pick') {
-    if (!kwPaths.length || !kwPaths.some(existsSync)) { log('error', '未找到关键词文件:', kwPaths.join(', ')); process.exit(1); }
+    if (!kwPaths.length || !kwPaths.some(existsSync)) { die(`未找到关键词文件: ${kwPaths.join(', ')}`); }
     const keywords = (await Promise.all(kwPaths.filter(existsSync).map(readExcel))).flat();
-    if (!keywords.length) { log('error', '关键词文件为空'); process.exit(1); }
+    if (!keywords.length) { die('关键词文件为空'); }
     const kw = keywords[Math.floor(Math.random() * keywords.length)], kwKeys = Object.keys(keywords[0]);
     const keyword = kw[kwKeys[0]] || kw.keyword || kw.name || '';
     let products = [];
@@ -503,17 +507,15 @@ extensions = ["data/extensions/wiedza.md"]
 
   if (cmd === 'publish') {
     const draftPath = process.argv[3] || DRAFT;
-    if (!existsSync(draftPath)) { log('error', '未找到草稿文件:', draftPath); process.exit(1); }
+    if (!existsSync(draftPath)) { die(`未找到草稿文件: ${draftPath}`); }
     const draft = JSON.parse(readFileSync(draftPath, 'utf-8'));
     const validation = validateDraft(draft);
     if (!validation.valid) {
-      log('error', '草稿文件结构无效:');
-      validation.errors.forEach(err => log('error', `  - ${err}`));
-      process.exit(1);
+      die('草稿文件结构无效:\n' + validation.errors.map(err => `  - ${err}`).join('\n'));
     }
     const { title, excerpt, content, tags = [] } = draft;
-    if (!title) { log('error', '草稿缺少标题'); process.exit(1); }
-    if (!content && !excerpt) { log('error', '草稿缺少内容/摘要'); process.exit(1); }
+    if (!title) { die('草稿缺少标题'); }
+    if (!content && !excerpt) { die('草稿缺少内容/摘要'); }
 
     log('info', '正在检查重复...');
     const dup = await checkDuplicate(site, title);
@@ -560,8 +562,7 @@ extensions = ["data/extensions/wiedza.md"]
     return;
   }
 
-  log('error', '用法: node wbp.mjs [pick|publish <file>|init]');
-  process.exit(1);
+  die('用法: node wbp.mjs [pick|publish <file>|init]');
 }
 
-main().catch(e => { log('error', '致命错误:', e.message); process.exit(1); });
+main().catch(e => { die(`致命错误: ${e.message}`); });
