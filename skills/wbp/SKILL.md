@@ -23,15 +23,16 @@ argument-hint: "<任务描述> [数量]"
 
 ### 1. 选取关键词
 ```bash
-node C:/Users/Administrator/.wbp/wbp.mjs pick
+wbp pick
 ```
 输出 JSON 包含：`site`、`keyword`、`keywordRow`、`products`、`prompts`、`extensions`、`images`
+（未全局化时改用 `node ~/.wbp/wbp.mjs pick`）
 
 ### 2. 撰写文章
 基于关键词、产品数据、写作提示词和扩展知识，撰写文章草稿。
 
 ### 3. 保存草稿
-写入 `C:/Users/Administrator/.wbp/_draft.json`：
+写入 `~/.wbp/_draft.json`：
 ```json
 {
   "title": "文章标题（40-70字符）",
@@ -43,7 +44,7 @@ node C:/Users/Administrator/.wbp/wbp.mjs pick
 
 ### 4. 发布文章
 ```bash
-node C:/Users/Administrator/.wbp/wbp.mjs publish C:/Users/Administrator/.wbp/_draft.json
+wbp publish ~/.wbp/_draft.json
 ```
 
 自动流程：去重检查 → 质量检查 → 分类/标签创建 → 图片处理 → 发布
@@ -104,7 +105,7 @@ node C:/Users/Administrator/.wbp/wbp.mjs publish C:/Users/Administrator/.wbp/_dr
 ```
 
 ## 注意事项
-- 始终先执行 `node wbp.mjs pick` 获取关键词和配置
+- 始终先执行 `wbp pick` 获取关键词和配置
 - 草稿 JSON 必须包含 title、content/excerpt、tags
 - 发布前会自动检查重复标题和质量
 - 如果质量检查不通过，需要补充内容后再发布

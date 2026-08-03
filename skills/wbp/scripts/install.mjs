@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// install.mjs — wbp.mjs 一键安装脚本
+// install.mjs — wbp 一键安装脚本
 // 用法：node install.mjs
-// 创建：~/.wbp/wbp.mjs, ~/.wbp/setting.toml, ~/.wbp/data/
-//          + AI 工具命令文件（仅针对检测到的 CLI）
+// 方式：npm link 全局化 — 在仓库目录注册全局 `wbp` 命令，一处安装、全局调用
+// 创建：~/.wbp/setting.toml, ~/.wbp/data/ + AI 工具命令文件（仅针对检测到的 CLI）
 // 注意：本脚本仅用于无需人工干预的首次安装，不覆盖已有配置
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, chmodSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -61,21 +61,23 @@ const detectedTools = TOOLS.filter(t => {
 
 console.log(`\n检测到 ${detectedTools.length} 个工具：${detectedTools.map(t => t.name).join(', ')}\n`);
 
-// ── 安装 npm 依赖 ──
-console.log('正在安装 exceljs 依赖...');
-// 确保目录存在
+// ── npm link 全局化：一处安装，全局调用 ──
+// 在 package.json 所在目录（SRC_DIR）安装依赖并注册全局 `wbp` 命令
+console.log('=== 注册全局命令（npm link）===');
+let linked = false;
+// 确保配置目录存在
 if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
 try {
-  execSync('npm install exceljs', { cwd: WP_DIR, stdio: 'ignore' });
-} catch {
-  execSync('npm init -y', { cwd: WP_DIR, stdio: 'ignore' });
-  execSync('npm install exceljs', { cwd: WP_DIR, stdio: 'ignore' });
+  execSync('npm install', { cwd: SRC_DIR, stdio: 'inherit' });
+  execSync('npm link', { cwd: SRC_DIR, stdio: 'inherit' });
+  // Unix 需要 wbp.mjs 可执行位（Windows 由 npm 生成 .cmd shim，无需 chmod）
+  try { chmodSync(SRC_MJS, 0o755); } catch { /* Windows/无权限则忽略，bin shim 仍可用 */ }
+  linked = true;
+  console.log('✓ 全局命令 `wbp` 已注册（一处安装，git pull 即可升级）');
+} catch (e) {
+  console.warn('⚠ npm link 失败（可能无需全局目录写权限）：', e.message.split('\n')[0]);
+  console.warn('  回退到本地复制模式，AI 命令将使用绝对路径调用。');
 }
-console.log('exceljs 已安装。');
-
-// ── 复制 wbp.mjs ──
-writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
-console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'));
 
 // ── 复制数据文件（引用数据无条件更新，用户配置文件不覆盖）──
 if (existsSync(DATA_SRC)) {
@@ -173,12 +175,22 @@ if (!existsSync(productsPath)) {
 // ── 生成 AI 工具命令文件 ──
 const wpPath = WP_DIR.replace(/\\/g, '/');
 const draftPath = `${wpPath}/_draft.json`;
+// 全局化成功：用 `wbp` 命令；失败回退：复制 wbp.mjs 并用绝对路径
+let runCmd;
+if (linked) {
+  runCmd = 'wbp';
+} else {
+  // 回退：复制 wbp.mjs 到 ~/.wbp，AI 命令用绝对路径
+  writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
+  console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'), '(回退模式)');
+  runCmd = `node ${wpPath}/wbp.mjs`;
+}
 const prompt = `# WordPress Publisher
 
-1. Run \`node ${wpPath}/wbp.mjs pick\` → keyword + config
+1. Run \`${runCmd} pick\` → keyword + config
 2. Write Chinese blog post (title, excerpt, tags, HTML)
 3. Save to ${draftPath}
-4. Run \`node ${wpPath}/wbp.mjs publish\`
+4. Run \`${runCmd} publish\`
 `;
 
 for (const tool of detectedTools) {
@@ -191,7 +203,14 @@ if (detectedTools.length === 0) {
   console.log('\n⚠ 未检测到 AI 工具。请安装 claude/codex/opencode/hermes/openclaw 后重试。');
 }
 
-console.log(`\n=== 安装完成 ===\n核心文件：${join(WP_DIR, 'wbp.mjs')}\n配置文件：${join(WP_DIR, 'setting.toml')}（运行 node wbp.mjs init 创建）`);
+console.log(`\n=== 安装完成 ===`);
+if (linked) {
+  console.log(`全局命令：wbp（任意目录可用：wbp pick / wbp publish / wbp init）`);
+  console.log(`升级方式：cd 仓库目录 && git pull（npm link 保持有效，无需重装）`);
+} else {
+  console.log(`核心文件：${join(WP_DIR, 'wbp.mjs')}`);
+}
+console.log(`配置文件：${join(WP_DIR, 'setting.toml')}（运行 wbp init 创建）`);
 console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：');
 console.log('  macOS/Linux (bash/zsh)：');
 console.log('    export WP_PASSWORD="your-wordpress-password"');

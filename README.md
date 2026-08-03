@@ -29,7 +29,24 @@
 
 ## 安装
 
-### 方式一：npx 直接安装（推荐，无需 clone 仓库）
+### 方式一：npm link 全局化（推荐，一处安装、全局调用）
+
+```bash
+git clone https://github.com/lopinx/wbp.git
+cd wbp/skills/wbp/scripts       # package.json 所在目录
+npm install
+npm link                         # 注册全局 `wbp` 命令
+node install.mjs                 # 自动检测 AI CLI 并创建命令文件
+wbp init                         # 生成配置模板
+```
+
+`npm link` 把仓库的 `wbp.mjs` 注册为系统全局命令，处处可用。**升级只需 `git pull`，无需重新安装**——全局链接始终指向仓库最新代码。
+
+安装脚本自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw），仅为已安装的工具创建命令文件；命令文件里用的是 `wbp` 全局命令，不再写死绝对路径。
+
+> `npm link` 失败时（如无全局目录写权限），安装脚本自动回退到本地复制模式，AI 命令改用绝对路径调用。
+
+### 方式二：npx 直接运行（无需 clone 仓库）
 
 ```bash
 # 一键安装到 ~/.wbp 并创建 AI 命令
@@ -41,19 +58,7 @@ npx github:lopinx/wbp pick     # 选取关键词
 npx github:lopinx/wbp publish ~/.wbp/_draft.json  # 发布文章
 ```
 
-> `npx github:lopinx/wbp` 会自动从 GitHub 拉取最新代码并在临时目录运行，安装脚本会将核心文件复制到 `~/.wbp/`，并在检测到的 AI 工具（Claude Code、Codex 等）中创建调用命令。
-
-### 方式二：传统 git clone 安装
-
-```bash
-git clone https://github.com/lopinx/wbp.git
-cd wbp
-npm install
-node install.mjs      # 自动检测 AI CLI 并创建命令文件
-node wbp.mjs init     # 生成配置模板
-```
-
-安装脚本自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw），仅为已安装的工具创建命令文件。
+> `npx github:lopinx/wbp` 会自动从 GitHub 拉取最新代码并在临时目录运行，安装脚本会在检测到的 AI 工具（Claude Code、Codex 等）中创建调用命令。
 
 ### npx 直接运行（无需安装）
 
@@ -67,17 +72,19 @@ npx github:lopinx/wbp init
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `node wbp.mjs init` | 创建配置模板 | `node wbp.mjs init` |
-| `node wbp.mjs pick` | 随机选取关键词 | `node wbp.mjs pick` |
-| `node wbp.mjs publish <draft.json>` | 发布草稿 | `node wbp.mjs publish ~/.wbp/_draft.json` |
+| `wbp init` | 创建配置模板 | `wbp init` |
+| `wbp pick` | 随机选取关键词 | `wbp pick` |
+| `wbp publish <draft.json>` | 发布草稿 | `wbp publish ~/.wbp/_draft.json` |
 
-### npm scripts
+> 未通过 `npm link` 全局化时，改用 `node wbp.mjs <命令>` 等价调用。
+
+### npm scripts（仓库内）
 
 ```bash
 npm start        # node wbp.mjs
 npm run init     # node wbp.mjs init
 npm run pick     # node wbp.mjs pick
-npm run test     # 97 项自检测试
+npm run test     # 自检测试
 ```
 
 ### 草稿 JSON 格式

@@ -9,17 +9,19 @@
 ### 核心工作流
 
 ```
-1. node wbp.mjs pick       → 随机选取关键词 + 获取配置上下文
-2. AI 撰写文章             → 基于关键词 + 产品数据 + 写作指令
-3. node wbp.mjs publish    → 去重检查 → 质量检查 → 图片处理 → 发布
+1. wbp pick       → 随机选取关键词 + 获取配置上下文
+2. AI 撰写文章    → 基于关键词 + 产品数据 + 写作指令
+3. wbp publish    → 去重检查 → 质量检查 → 图片处理 → 发布
 ```
+
+> 全局化安装后 `wbp` 命令随处可用（`npm link` 注册）；未全局化时等价于 `node wbp.mjs <命令>`。
 
 ## 关键文件
 
 | 文件 | 说明 |
 |------|------|
 | `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试 |
-| `skills/wbp/scripts/install.mjs` | 一键安装脚本，自动检测 AI CLI 创建命令文件 |
+| `skills/wbp/scripts/install.mjs` | 一键安装脚本，npm link 全局化 + 自动检测 AI CLI 创建命令文件 |
 | `skills/wbp/scripts/__TEST__/selftest.mjs` | 97 项自动化测试 |
 | `skills/wbp/scripts/package.json` | ESM 模块，依赖 exceljs |
 | `skills/wbp/SKILL.md` | 技能定义文档 |
@@ -46,8 +48,9 @@
 ## 测试
 
 - `node --check wbp.mjs` 语法检查
-- `node selftest.mjs` 运行 97 项测试
+- `node selftest.mjs` 运行自检测试
 - 测试覆盖：语法、init、pick、TOML 解析、去重（含 CJK）、图片混排、图片函数、WP API、错误处理、文档验证
+- `npm link` 全局化后验证：`wbp pick` 在仓库外目录可执行
 
 ## 代码约定
 
