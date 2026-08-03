@@ -12,7 +12,7 @@
     "pick": "node wbp.mjs pick",
     "publish": "node wbp.mjs publish",
     "init": "node wbp.mjs init",
-    "install": "node install.mjs"
+    "install": "node wbp.mjs install"
   },
   "keywords": ["wordpress", "publisher", "cli", "ai", "vape", "s3", "qiniu", "minio"],
   "author": "",

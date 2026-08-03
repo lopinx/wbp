@@ -20,8 +20,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试 |
-| `skills/wbp/scripts/install.mjs` | 一键安装脚本，npm link 全局化 + 自动检测 AI CLI 创建命令文件 |
+| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试。`wbp install` 子命令负责 npm link 全局化 + 自动检测 AI CLI 创建命令文件 |
 | `skills/wbp/scripts/__TEST__/selftest.mjs` | 97 项自动化测试 |
 | `skills/wbp/scripts/package.json` | ESM 模块，依赖 exceljs |
 | `skills/wbp/SKILL.md` | 技能定义文档 |

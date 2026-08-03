@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, writeSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, writeSync, mkdirSync, chmodSync, readdirSync, statSync } from 'fs';
 import { homedir } from 'os';
-import { join, resolve, sep } from 'path';
+import { join, resolve, sep, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import { createHash, createHmac } from 'crypto';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
@@ -421,13 +423,147 @@ async function checkQuality(title, content, excerpt, tags, site) {
   return { issues, warnings };
 }
 
+// ── 安装：npm link 全局化 + 检测 AI CLI 生成命令 + 复制数据 ──
+// 单文件架构：原 install.mjs 逻辑合并至此，wbp install 一条命令完成
+async function doInstall() {
+  console.log('=== WordPress 发布器安装程序 ===\n');
+  const SRC_DIR = dirname(fileURLToPath(import.meta.url));
+  const SRC_MJS = join(SRC_DIR, 'wbp.mjs');
+  const DATA_SRC = join(SRC_DIR, '../references/data');
+  const DATA_DST = join(WP_DIR, 'data');
+  if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
+
+  // ── 辅助：检查 CLI 是否存在（白名单 + 安全参数）──
+  const checkCLI = (cmd, args = ['--version']) => {
+    if (!new Set(['claude', 'codex', 'opencode', 'hermes', 'openclaw']).has(cmd)) return false;
+    const safeArgs = args.filter(a => a.startsWith('-'));
+    try { execSync(`${cmd} ${safeArgs.join(' ')}`, { stdio: 'ignore', timeout: 3000 }); return true; } catch { return false; }
+  };
+
+  // ── 检测已安装的 AI CLI ──
+  console.log('正在检测已安装的 AI 工具...\n');
+  const TOOLS = [
+    { name: 'Claude Code',  slug: 'claude',    dir: ['.claude', 'commands'],               invoke: '/wbp' },
+    { name: 'OpenAI Codex', slug: 'codex',    dir: ['.codex', 'prompts'],                 invoke: '@wbp' },
+    { name: 'OpenCode',     slug: 'opencode', dir: ['.config', 'opencode', 'commands'],   invoke: '/wbp' },
+    { name: 'Hermes',       slug: 'hermes',   dir: ['.hermes', 'commands'],               invoke: '/wbp' },
+    { name: 'OpenClaw',     slug: 'openclaw', dir: ['.openclaw', 'commands'],             invoke: '/wbp' },
+  ];
+  const detectedTools = TOOLS.filter(t => {
+    const found = checkCLI(t.slug) || existsSync(join(homedir(), ...t.dir.slice(0, -1)));
+    console.log(found ? `  ✓ 检测到 ${t.name}` : `  ✗ 未找到 ${t.name}`);
+    return found;
+  }).map(t => ({ ...t, configDir: join(homedir(), ...t.dir), promptFile: 'wbp.md' }));
+  console.log(`\n检测到 ${detectedTools.length} 个工具：${detectedTools.map(t => t.name).join(', ')}\n`);
+
+  // ── npm link 全局化：一处安装，全局调用 ──
+  console.log('=== 注册全局命令（npm link）===');
+  let linked = false;
+  try {
+    execSync('npm install', { cwd: SRC_DIR, stdio: 'inherit' });
+    execSync('npm link', { cwd: SRC_DIR, stdio: 'inherit' });
+    try { chmodSync(SRC_MJS, 0o755); } catch { /* Windows/.cmd shim 不需可执行位 */ }
+    linked = true;
+    console.log('✓ 全局命令 `wbp` 已注册（一处安装，git pull 即可升级）');
+  } catch (e) {
+    console.warn('⚠ npm link 失败（可能无需全局目录写权限）：', e.message.split('\n')[0]);
+    console.warn('  回退到本地复制模式，AI 命令将使用绝对路径调用。');
+  }
+
+  // ── 复制数据文件（引用数据无条件更新，用户配置文件不覆盖）──
+  if (existsSync(DATA_SRC)) {
+    const REF_FILES = ['keywords.xlsx', 'products.xlsx', 'prompts.md'];
+    const REF_DIRS = ['extensions'];
+    const cp = (src, dst) => {
+      if (!existsSync(dst)) mkdirSync(dst, { recursive: true });
+      for (const f of readdirSync(src)) {
+        const s = join(src, f), d = join(dst, f);
+        if (statSync(s).isDirectory()) { if (REF_DIRS.includes(f)) cp(s, d); }
+        else if (REF_FILES.includes(f) || !existsSync(d)) { writeFileSync(d, readFileSync(s)); }
+      }
+    };
+    cp(DATA_SRC, DATA_DST);
+    console.log('数据文件已复制到', DATA_DST);
+  } else {
+    console.warn('⚠ 未找到数据源目录:', DATA_SRC);
+  }
+  for (const d of [join(WP_DIR, 'data'), join(WP_DIR, 'data', 'extensions')]) {
+    if (!existsSync(d)) mkdirSync(d, { recursive: true });
+  }
+
+  // ── 创建示例提示/扩展文档（仅当文件不存在）──
+  const promptsPath = join(WP_DIR, 'data', 'prompts.md');
+  if (!existsSync(promptsPath)) {
+    writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
+  }
+  const knowledgePath = join(WP_DIR, 'data', 'extensions', 'knowledge.md');
+  if (!existsSync(knowledgePath)) {
+    writeFileSync(knowledgePath, `# 领域知识\n\n## 行业术语\n- 保持专业度\n- 解释生僻术语\n\n## 注意事项\n- 避免过度营销\n- 引用来源\n`, 'utf-8');
+  }
+
+  // ── 创建示例 keywords.xlsx + products.xlsx（仅当文件不存在）──
+  const ExcelJS = (await import('exceljs')).default;
+  const keywordsPath = join(WP_DIR, 'data', 'keywords.xlsx');
+  if (!existsSync(keywordsPath)) {
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('keywords');
+    ws.addRow(['keyword']);
+    for (const k of ['人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全']) ws.addRow([k]);
+    await wb.xlsx.writeFile(keywordsPath);
+  }
+  const productsPath = join(WP_DIR, 'data', 'products.xlsx');
+  if (!existsSync(productsPath)) {
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('products');
+    ws.addRow(['name', 'price', 'desc']);
+    ws.addRow(['产品A', 99, '基础版']);
+    ws.addRow(['产品B', 199, '高级版']);
+    await wb.xlsx.writeFile(productsPath);
+  }
+
+  // ── 生成 AI 工具命令文件 ──
+  const wpPath = WP_DIR.replace(/\\/g, '/');
+  const draftPath = `${wpPath}/_draft.json`;
+  let runCmd;
+  if (linked) {
+    runCmd = 'wbp';
+  } else {
+    writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
+    console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'), '(回退模式)');
+    runCmd = `node ${wpPath}/wbp.mjs`;
+  }
+  const prompt = `# WordPress Publisher\n\n1. Run \`${runCmd} pick\` → keyword + config\n2. Write Chinese blog post (title, excerpt, tags, HTML)\n3. Save to ${draftPath}\n4. Run \`${runCmd} publish\`\n`;
+  for (const tool of detectedTools) {
+    if (!existsSync(tool.configDir)) mkdirSync(tool.configDir, { recursive: true });
+    writeFileSync(join(tool.configDir, tool.promptFile), prompt, 'utf-8');
+    console.log(`  ✓ 已创建 ${tool.name} 命令`);
+  }
+  if (detectedTools.length === 0) console.log('\n⚠ 未检测到 AI 工具。请安装 claude/codex/opencode/hermes/openclaw 后重试。');
+
+  console.log(`\n=== 安装完成 ===`);
+  if (linked) {
+    console.log(`全局命令：wbp（任意目录可用：wbp pick / wbp publish / wbp init）`);
+    console.log(`升级方式：cd 仓库目录 && git pull（npm link 保持有效，无需重装）`);
+  } else {
+    console.log(`核心文件：${join(WP_DIR, 'wbp.mjs')}`);
+  }
+  console.log(`配置文件：${join(WP_DIR, 'setting.toml')}（运行 wbp init 创建）`);
+  console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：');
+  console.log('  macOS/Linux (bash/zsh)：');
+  console.log('    export WP_PASSWORD="your-wordpress-password"');
+  console.log('    export AWS_ACCESS_KEY_ID="your-aws-access-key"');
+  console.log('    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
+  console.log('  Windows (PowerShell)：');
+  console.log('    $env:WP_PASSWORD="your-wordpress-password"');
+  console.log('    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"');
+  console.log('    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
+  if (detectedTools.length > 0) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+}
+
 // ── 主函数 ──
 async function main() {
   const cmd = process.argv[2] || 'pick';
 
   if (cmd === 'install') {
-    const { default: install } = await import('./install.mjs');
-    await install();
+    await doInstall();
     return;
   }
 

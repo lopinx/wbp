@@ -36,7 +36,7 @@ git clone https://github.com/lopinx/wbp.git
 cd wbp/skills/wbp/scripts       # package.json 所在目录
 npm install
 npm link                         # 注册全局 `wbp` 命令
-node install.mjs                 # 自动检测 AI CLI 并创建命令文件
+wbp install                      # 全局化 + 自动检测 AI CLI 并创建命令文件
 wbp init                         # 生成配置模板
 ```
 
@@ -194,10 +194,9 @@ wordpress-skills/
 ├── skills/wbp/
 │   ├── SKILL.md             # 技能定义
 │   ├── scripts/
-│   │   ├── wbp.mjs          # 核心 CLI
-│   │   ├── install.mjs      # 一键安装脚本
+│   │   ├── wbp.mjs          # 核心 CLI（含 install 子命令：npm link + AI CLI 检测）
 │   │   └── __TEST__/
-│   │       └── selftest.mjs # 97 项自检测试
+│   │       └── selftest.mjs # 自检测试
 │   └── references/
 │       └── data/
 │           ├── keywords.xlsx    # 关键词池
@@ -225,7 +224,7 @@ node --check wbp.mjs # 语法检查
 2. 在项目根目录运行：
 
 ```bash
-zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wbp/scripts/wbp.mjs skills/wbp/scripts/install.mjs skills/wbp/scripts/__TEST__/selftest.mjs skills/wbp/references/data/ skills/wbp/scripts/package.json
+zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wbp/scripts/wbp.mjs skills/wbp/scripts/__TEST__/selftest.mjs skills/wbp/references/data/ skills/wbp/scripts/package.json
 ```
 
 3. 生成的 `wbp-skill.zip` 文件即可分发或导入到 AI 工具的技能目录中。
@@ -240,7 +239,7 @@ zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wb
 | **Hermes** | `~/.hermes/skills/wbp.skill.md` | `/wbp` |
 | **OpenClaw** | `~/.openclaw/skills/wbp.skill.md` | `/wbp` |
 
-也可以使用 `install.mjs` 脚本自动检测并安装到这些工具。
+也可以使用 `wbp install` 命令自动检测并安装到这些工具。
 
 ## 许可
 

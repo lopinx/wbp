@@ -21,7 +21,6 @@ function run(cmd, args) { return spawnSync(process.execPath, [cmd, ...args], { c
 // ── 1. 语法检查 ──
 console.log('## 1. 语法检查');
 ok(run('--check', [join(SCRIPT_DIR, 'wbp.mjs')]).status === 0, 'wbp.mjs 语法正确');
-ok(run('--check', [join(SCRIPT_DIR, 'install.mjs')]).status === 0, 'install.mjs 语法正确');
 ok(run('--check', [join(__dirname, 'selftest.mjs')]).status === 0, 'selftest.mjs 语法正确');
 
 // ── 2. 初始化 ──
@@ -205,12 +204,13 @@ ok(src.includes('async function uploadExternalImages'), 'uploadExternalImages �
 ok(src.includes('async function findOrCreate'), 'findOrCreate 已定义');
 ok(src.includes('async function checkDuplicate'), 'checkDuplicate 已定义');
 
-// ── 11. 安装脚本 ──
-console.log('\n## 11. 安装脚本');
-const installSrc = readFileSync(join(SCRIPT_DIR, 'install.mjs'), 'utf-8');
-ok(installSrc.includes('checkCLI'), '安装脚本包含 CLI 检测');
-ok(installSrc.includes('detectedTools'), '安装脚本包含工具跟踪');
-ok(installSrc.includes('prompt'), '安装脚本包含提示模板');
+// ── 11. 安装逻辑（合并进 wbp.mjs 的 doInstall）──
+console.log('\n## 11. 安装逻辑');
+ok(src.includes('async function doInstall'), 'wbp.mjs 包含 doInstall 安装函数');
+ok(src.includes('checkCLI'), '安装逻辑包含 CLI 检测');
+ok(src.includes('detectedTools'), '安装逻辑包含工具跟踪');
+ok(src.includes('npm link'), '安装逻辑包含 npm link 全局化');
+ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wbp.mjs）');
 
 // ── 12. 文档 ──
 console.log('\n## 12. 文档');

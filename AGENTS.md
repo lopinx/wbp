@@ -9,8 +9,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存 |
-| `install.mjs` | 一键安装脚本，智能检测本地已安装的 AI CLI，仅为检测到的工具创建命令文件 |
+| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 |
 | `selftest.mjs` | 97 项自动化测试，覆盖语法、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证 |
 | `package.json` | Node.js 项目清单，依赖 exceljs 库 |
 | `CLAUDE.md` | Claude Code 项目记忆，含提交规范 |
