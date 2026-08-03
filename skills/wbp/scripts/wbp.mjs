@@ -37,23 +37,24 @@ function log(level, message, data = {}, skipPrefix = false) {
   const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
 
   // 输出到控制台
+  const finalData = data || {};
   if (level === 'error') {
     if (skipPrefix) {
-      console.error(message, data || {});
+      console.error(message, finalData);
     } else {
-      console.error(`${prefix} ${message}`, data || {});
+      console.error(`${prefix} ${message}`, finalData);
     }
   } else if (level === 'warn') {
     if (skipPrefix) {
-      console.warn(message, data || {});
+      console.warn(message, finalData);
     } else {
-      console.warn(`${prefix} ${message}`, data || {});
+      console.warn(`${prefix} ${message}`, finalData);
     }
   } else {
     if (skipPrefix) {
-      console.log(message, data || {});
+      console.log(message, finalData);
     } else {
-      console.log(`${prefix} ${message}`, data || {});
+      console.log(`${prefix} ${message}`, finalData);
     }
   }
 }
@@ -495,13 +496,8 @@ extensions = ["data/extensions/wiedza.md"]
     if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
     const safe = site.images ? { ...site.images, key: undefined } : null;
     const output = JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2);
-    try {
-      log('info', output, null, true);
-      console.log(output);
-    } catch (e) {
-      log('error', 'Log error:', e);
-      console.log(output);
-    }
+    // Use console.log directly for pick command to avoid JSON parsing issues in tests
+    console.log(output);
     return;
   }
 
