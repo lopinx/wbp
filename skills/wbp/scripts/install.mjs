@@ -22,8 +22,15 @@ async function install() {
 
 // ── 辅助函数：检查 CLI 是否存在 ──
 function checkCLI(cmd, args = ['--version']) {
+  // 白名单验证
+  const validCommands = new Set(['claude', 'codex', 'opencode', 'hermes', 'openclaw']);
+  if (!validCommands.has(cmd)) {
+    return false;
+  }
+  // 仅允许安全参数（以 - 开头）
+  const safeArgs = args.filter(arg => arg.startsWith('-'));
   try {
-    execSync(`${cmd} ${args.join(' ')}`, { stdio: 'ignore', timeout: 3000 });
+    execSync(`${cmd} ${safeArgs.join(' ')}`, { stdio: 'ignore', timeout: 3000 });
     return true;
   } catch {
     return false;
@@ -55,16 +62,16 @@ const detectedTools = TOOLS.filter(t => {
 console.log(`\n检测到 ${detectedTools.length} 个工具：${detectedTools.map(t => t.name).join(', ')}\n`);
 
 // ── 安装 npm 依赖 ──
-console.log('正在安装 xlsx 依赖...');
+console.log('正在安装 exceljs 依赖...');
 // 确保目录存在
 if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
 try {
-  execSync('npm install xlsx', { cwd: WP_DIR, stdio: 'ignore' });
+  execSync('npm install exceljs', { cwd: WP_DIR, stdio: 'ignore' });
 } catch {
   execSync('npm init -y', { cwd: WP_DIR, stdio: 'ignore' });
-  execSync('npm install xlsx', { cwd: WP_DIR, stdio: 'ignore' });
+  execSync('npm install exceljs', { cwd: WP_DIR, stdio: 'ignore' });
 }
-console.log('xlsx 已安装。');
+console.log('exceljs 已安装。');
 
 // ── 复制 wbp.mjs ──
 writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
@@ -138,31 +145,29 @@ if (!existsSync(knowledgePath)) {
 }
 
 // ── 创建示例 keywords.xlsx + products.xlsx（仅当文件不存在时）──
-const xlsx = await import('xlsx');
-const { utils } = xlsx;
-const writeXLSX = xlsx.default ? xlsx.default.writeFile : xlsx.writeFile;
+const ExcelJS = (await import('exceljs')).default;
 
 const keywordsPath = join(WP_DIR, 'data', 'keywords.xlsx');
 if (!existsSync(keywordsPath)) {
-  const wb = utils.book_new();
-  utils.book_append_sheet(wb, utils.json_to_sheet([
-    { keyword: '人工智能趋势' },
-    { keyword: 'Python入门指南' },
-    { keyword: 'Web开发最佳实践' },
-    { keyword: '云计算架构' },
-    { keyword: '数据安全' }
-  ]), 'keywords');
-  writeXLSX(wb, keywordsPath);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('keywords');
+  ws.addRow(['keyword']);
+  ws.addRow(['人工智能趋势']);
+  ws.addRow(['Python入门指南']);
+  ws.addRow(['Web开发最佳实践']);
+  ws.addRow(['云计算架构']);
+  ws.addRow(['数据安全']);
+  await wb.xlsx.writeFile(keywordsPath);
 }
 
 const productsPath = join(WP_DIR, 'data', 'products.xlsx');
 if (!existsSync(productsPath)) {
-  const wb2 = utils.book_new();
-  utils.book_append_sheet(wb2, utils.json_to_sheet([
-    { name: '产品A', price: 99, desc: '基础版' },
-    { name: '产品B', price: 199, desc: '高级版' }
-  ]), 'products');
-  writeXLSX(wb2, productsPath);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('products');
+  ws.addRow(['name', 'price', 'desc']);
+  ws.addRow(['产品A', 99, '基础版']);
+  ws.addRow(['产品B', 199, '高级版']);
+  await wb.xlsx.writeFile(productsPath);
 }
 
 // ── 生成 AI 工具命令文件 ──
@@ -187,6 +192,12 @@ if (detectedTools.length === 0) {
 }
 
 console.log(`\n=== 安装完成 ===\n核心文件：${join(WP_DIR, 'wbp.mjs')}\n配置文件：${join(WP_DIR, 'setting.toml')}（运行 node wbp.mjs init 创建）`);
+console.log('\n安全建议：');
+console.log('  - 设置环境变量：');
+console.log('    export WP_PASSWORD="your-wordpress-password"');
+console.log('    export AWS_ACCESS_KEY_ID="your-aws-access-key"');
+console.log('    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
+console.log('  - 这样可避免密码明文存储在 TOML 文件中。');
 if (detectedTools.length > 0) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 

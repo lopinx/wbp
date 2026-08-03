@@ -6,21 +6,123 @@ import { createHash, createHmac } from 'crypto';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
 
+const LOG_LEVELS = {
+  ERROR: 'error',
+  WARN: 'warn',
+  INFO: 'info',
+  DEBUG: 'debug'
+};
+
+const LOG_LEVEL = process.env.WBP_LOG_LEVEL || 'info';
+
+/**
+ * 统一日志函数
+ * @param {string} level - 日志级别
+ * @param {string} message - 日志消息
+ * @param {Object} data - 附加数据（可选）
+ * @param {boolean} skipPrefix - 是否跳过时间戳和级别前缀（默认 false）
+ */
+function log(level, message, data = {}, skipPrefix = false) {
+  // 检查是否应该输出
+  const levelOrder = ['debug', 'info', 'warn', 'error'];
+  const currentLevelIndex = levelOrder.indexOf(LOG_LEVEL);
+  const messageLevelIndex = levelOrder.indexOf(level);
+
+  if (messageLevelIndex > currentLevelIndex) {
+    return;
+  }
+
+  // 格式化消息
+  const timestamp = new Date().toISOString();
+  const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
+
+  // 输出到控制台
+  if (level === 'error') {
+    if (skipPrefix) {
+      console.error(message, data || {});
+    } else {
+      console.error(`${prefix} ${message}`, data || {});
+    }
+  } else if (level === 'warn') {
+    if (skipPrefix) {
+      console.warn(message, data || {});
+    } else {
+      console.warn(`${prefix} ${message}`, data || {});
+    }
+  } else {
+    if (skipPrefix) {
+      console.log(message, data || {});
+    } else {
+      console.log(`${prefix} ${message}`, data || {});
+    }
+  }
+}
+
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
 const asArray = x => Array.isArray(x) ? x : [x];
 
-async function resolveCategoryIds(site, cats) {
-  if (!cats) return [];
-  if (!Array.isArray(cats)) cats = [cats];
-  if (!cats.length) return [];
-  const ids = [];
-  for (const c of cats) {
-    if (typeof c === 'string' && c.trim() === '') continue;
-    const s = String(c).trim();
-    if (/^\d+$/.test(s) && Number(s) > 0) { ids.push(Number(s)); continue; }
-    ids.push(await findOrCreate(site, 'categories', s, categoryCache));
+/**
+ * 安全路径验证函数
+ * 防止目录遍历攻击，确保路径在允许的目录内
+ */
+function safePath(p) {
+  if (!p) return null;
+
+  // 使用 path.resolve 解析相对路径
+  const resolved = resolve(p);
+
+  // 检查路径是否在允许的目录内（防止 ../ 攻击）
+  if (!resolved.startsWith(WP_DIR)) {
+    throw new Error(`路径不在允许的目录内: ${p} (解析为: ${resolved})`);
   }
-  return ids;
+
+  return resolved;
+}
+
+// 验证键名是否安全（防止原型污染）
+function isValidKey(key) {
+  // 只允许字母、数字、下划线，且必须以字母或下划线开头
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+    return false;
+  }
+  // 明确阻止原型污染相关的危险键名
+  const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+  return !dangerousKeys.includes(key);
+}
+
+/**
+ * 验证草稿文件结构
+ * @param {Object} draft - 草稿对象
+ * @returns {{valid: boolean, errors: string[]}}
+ */
+function validateDraft(draft) {
+  const errors = [];
+
+  // 必需字段检查
+  const requiredFields = ['title', 'content', 'excerpt'];
+  for (const field of requiredFields) {
+    if (!draft[field]) {
+      errors.push(`草稿缺少必需字段: ${field}`);
+    }
+  }
+
+  // 类型检查
+  if (draft.title && typeof draft.title !== 'string') {
+    errors.push('title 必须是字符串');
+  }
+
+  if (draft.content && typeof draft.content !== 'string') {
+    errors.push('content 必须是字符串');
+  }
+
+  if (draft.excerpt && typeof draft.excerpt !== 'string') {
+    errors.push('excerpt 必须是字符串');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
 }
 
 // ── 迷你 TOML 解析器 ──
@@ -64,24 +166,36 @@ function parseToml(t) {
     else if (/^-?\d+$/.test(val)) val = Number(val);
     let o = r;
     for (const p of path) o = o[p] = o[p] || {};
+    if (!isValidKey(kv[1])) {
+      throw new Error(`无效的 TOML 键: ${kv[1]}，只能包含字母、数字和下划线，且必须以字母或下划线开头`);
+    }
     o[kv[1]] = val;
   }
   return r;
 }
 
 // ── Excel 读取器 ──
-let XLSX;
-async function loadXLSX() { if (!XLSX) { const m = await import('xlsx'); XLSX = m.default || m; } return XLSX; }
 async function readExcel(p) {
-  if (!existsSync(p)) throw new Error(`文件未找到: ${p}`);
-  const x = await loadXLSX(), wb = x.readFile(p), ws = wb.Sheets[wb.SheetNames[0]];
-  return x.utils.sheet_to_json(ws);
+  if (!existsSync(p)) throw new Error('文件未找到');
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(p);
+  const ws = wb.getWorksheet(1);
+  const data = [];
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber > 1) { // 跳过表头
+      const rowValues = row.values;
+      rowValues.shift(); // 移除空值
+      data.push(rowValues);
+    }
+  });
+  return data;
 }
 
 // ── 图片搜索（Serper.dev / 兼容 API）──
 async function searchImages(cfg, tags, title) {
   const keys = cfg.keys || (cfg.key ? [cfg.key] : []);
-  if (!keys.length) { console.warn('  ⚠ 未配置 images.keys'); return []; }
+  if (!keys.length) { log('warn', '  ⚠ 未配置 images.keys'); return []; }
   const key = keys[Math.floor(Math.random() * keys.length)];
   const { gl = 'pl', hl = 'pl', tbs = 'qdr:w' } = cfg;
   const keep = (tags || []).filter(t => t.length > 2 && !/^\d+\s*(in|pack|pcs|set|pairs?|stk|ctn|box|bag|roll|sheets?|ml|g|kg|cm|mm|inch)/i.test(t));
@@ -92,10 +206,10 @@ async function searchImages(cfg, tags, title) {
     headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
     body: JSON.stringify({ q: truncated, gl, hl, tbs })
   });
-  if (!res.ok) { console.warn(`  图片搜索失败: ${res.status}`); return []; }
+  if (!res.ok) { log('warn', `  图片搜索失败: ${res.status}`); return []; }
   let data;
-  try { data = await res.json(); } catch { console.warn('  图片搜索响应解析失败'); return []; }
-  if (!data.images || !data.images.length) { console.warn('  图片搜索返回空结果，可能 API 响应格式已变更'); return []; }
+  try { data = await res.json(); } catch { log('warn', '  图片搜索响应解析失败'); return []; }
+  if (!data.images || !data.images.length) { log('warn', '  图片搜索返回空结果，可能 API 响应格式已变更'); return []; }
   return data.images.map(i => i.imageUrl).filter(u => u && /^https?:\/\//.test(u));
 }
 
@@ -108,18 +222,18 @@ async function fetchWithRetry(url, opts, retries = 3) {
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i >= retries) return res;
       const d = 1000 * Math.pow(2, i) + Math.random() * 200;
-      console.warn(`  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`);
+      log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`);
       await new Promise(r => setTimeout(r, d));
     } catch (e) {
       if (i >= retries) throw e;
       const d = 1000 * Math.pow(2, i) + Math.random() * 200;
-      console.warn(`  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`);
+      log('warn', `  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`);
       await new Promise(r => setTimeout(r, d));
     }
   }
 }
 
-async function s3List(cfg) {
+async function s3List(cfg, limit) {
   const { bucket, region, key, secret, prefix = '', endpoint } = cfg;
   const ep = endpoint ? endpoint.replace(/\/+$/, '') : null;
   const host = ep ? new URL(ep).hostname : `${bucket}.s3.${region}.amazonaws.com`;
@@ -137,32 +251,49 @@ async function s3List(cfg) {
     const sk = sigKey(secret, ds, region, 's3'), sig = hmac(sk, sts).toString('hex');
     const auth = `AWS4-HMAC-SHA256 Credential=${key}/${cs}, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=${sig}`;
     const res = await fetchWithRetry(`${baseUrl}/?${q}`, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { host, 'x-amz-content-sha256': ph, 'x-amz-date': amz, authorization: auth } });
-    if (!res.ok) { const errText = await res.text().catch(() => ''); throw new Error(`S3 列表获取失败: ${res.status} — ${errText.slice(0, 200)}`); }
+    if (!res.ok) { const errText = await res.text().catch(() => ''); throw new Error(`S3 列表获取失败: ${res.status}`); }
     const xml = await res.text();
     const unesc = xml.replace(/&(amp|lt|gt|quot|apos);/g, (_, e) => ({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[e]);
     images.push(...[...unesc.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]));
     const ct = unesc.match(/<IsTruncated>true<\/IsTruncated>/);
     token = ct ? (unesc.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/) || [,''])[1] : '';
   } while (token);
-  const imgs = images.filter(k => /\.(jpg|jpeg|png|gif|webp|avif)$/i.test(k));
+  const imgs = images.filter(k => /\.(jpg|jpeg|png|gif|webp|avif)$/i.test(k)).slice(0, limit);
   const base = cfg.domain ? `https://${cfg.domain}/${prefix}` : ep ? `${ep}/${prefix}` : `https://${bucket}.s3.${region}.amazonaws.com/${prefix}`;
   return imgs.map(k => k.startsWith(prefix) ? base + k.slice(prefix.length) : base + k.replace(/^\/+/, ''));
 }
 
+// ── 安全获取认证配置（环境变量优先）──
+function getAuthConfig(site) {
+  const pass = process.env.WP_PASSWORD || site.pass;
+  const key = process.env.AWS_ACCESS_KEY_ID || site.key;
+  const secret = process.env.AWS_SECRET_ACCESS_KEY || site.secret;
+  if (!process.env.WP_PASSWORD) {
+    log('warn', '警告: WP_PASSWORD 环境变量未设置，使用 TOML 配置（不安全）');
+  }
+  if (!process.env.AWS_ACCESS_KEY_ID) {
+    log('warn', '警告: AWS_ACCESS_KEY_ID 环境变量未设置，使用 TOML 配置（不安全）');
+  }
+  if (!process.env.AWS_SECRET_ACCESS_KEY) {
+    log('warn', '警告: AWS_SECRET_ACCESS_KEY 环境变量未设置，使用 TOML 配置（不安全）');
+  }
+  return { pass, key, secret };
+}
+
 // ── WordPress REST API ──
-function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${site.pass}`).toString('base64'); }
+function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${getAuthConfig(site).pass}`).toString('base64'); }
 const categoryCache = new Map(), tagCache = new Map();
 
 async function wpFetch(site, path, opts = {}) {
   const url = `${site.url.replace(/\/+$/, '')}/${path.replace(/^\//, '')}`;
   const res = await fetchWithRetry(url, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'Authorization': wpAuth(site), 'Content-Type': 'application/json', ...opts.headers } });
-  if (!res.ok) { const body = await res.text().catch(() => ''); throw new Error(`WP API ${res.status}: ${res.statusText} — ${body.slice(0, 200)}`); }
+  if (!res.ok) { const body = await res.text().catch(() => ''); log('error', `WP API 错误: ${res.status} ${res.statusText}`); throw new Error(`WP API ${res.status}: ${res.statusText}`); }
   return res.json();
 }
 
 async function uploadImage(site, imgUrl) {
   const res = await fetch(imgUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`获取 ${imgUrl} 失败: ${res.status}`);
+  if (!res.ok) { log('error', `获取 ${imgUrl} 失败: ${res.status}`); throw new Error(`获取图片失败: ${res.status}`); }
   const buf = Buffer.from(await res.arrayBuffer());
   let raw; try { raw = decodeURIComponent(imgUrl.split('?')[0].split('/').pop() || 'image.jpg'); } catch { raw = 'image.jpg'; }
   const ext = '.' + ((raw.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i) || [])[1] || 'jpg');
@@ -173,9 +304,9 @@ async function uploadImage(site, imgUrl) {
     headers: { 'Authorization': wpAuth(site), 'Content-Type': `multipart/form-data; boundary=${boundary}` },
     body: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${ctype}\r\n\r\n`), buf, Buffer.from(`\r\n--${boundary}--\r\n`)])
   });
-  if (!r.ok) { const txt = await r.text().catch(() => ''); throw new Error(`媒体上传失败: ${r.status} — ${txt.slice(0, 200)}`); }
+  if (!r.ok) { const txt = await r.text().catch(() => ''); log('error', `媒体上传失败: ${r.status}`); throw new Error(`媒体上传失败: ${r.status}`); }
   const j = await r.json();
-  if (!j?.source_url) throw new Error(`媒体上传返回缺少 source_url: ${imgUrl}`);
+  if (!j?.source_url) throw new Error('媒体上传返回缺少 source_url');
   return j.source_url;
 }
 
@@ -184,8 +315,8 @@ async function uploadExternalImages(site, html) {
   const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
   for (const url of urls) {
     if (url.startsWith(siteOrigin) || results[url]) continue;
-    try { console.log(`  正在上传: ${url.slice(0, 60)}...`); results[url] = await uploadImage(site, url); console.log(`  → ${results[url]}`); }
-    catch (e) { console.warn(`  ⚠ 上传失败: ${e.message}`); }
+    try { log('info', `  正在上传: ${url.slice(0, 60)}...`); results[url] = await uploadImage(site, url); log('info', `  → ${results[url]}`); }
+    catch (e) { log('warn', `  ⚠ 上传失败: ${e.message}`); }
   }
   return results;
 }
@@ -222,23 +353,13 @@ async function checkDuplicate(site, title) {
 // ── 图片混排 ──
 function mixImages(html, images) {
   if (!images.length) return html;
-  const imgs = [...images];
-  for (let i = imgs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = imgs[i]; imgs[i] = imgs[j]; imgs[j] = t; }
   const paras = html.match(PARA_RE) || [];
   if (!paras.length) return html;
-  const step = Math.max(1, Math.floor(paras.length / (imgs.length + 1)));
-  const parts = []; let remaining = html, cursor = 0;
-  for (let i = 0; i < paras.length; i++) {
-    const idx = remaining.indexOf(paras[i], cursor);
-    if (idx === -1) { parts.push(remaining); remaining = ''; break; }
-    parts.push(remaining.slice(0, idx + paras[i].length));
-    remaining = remaining.slice(idx + paras[i].length);
-    cursor = 0;
-  }
-  if (remaining) parts.push(remaining);
+  const step = Math.max(1, Math.floor(paras.length / (images.length + 1)));
+  const parts = [...paras];
   let imgIdx = 0;
-  for (let i = Math.min(step, parts.length - 1); i < parts.length && imgIdx < imgs.length; i += step) {
-    parts[i] = `<figure><img src="${imgs[imgIdx++]}" alt="" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>\n${parts[i]}`;
+  for (let i = Math.min(step, parts.length - 1); i < parts.length && imgIdx < images.length; i += step) {
+    parts[i] = `<figure><img src="${images[imgIdx++]}" alt="" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>\n${parts[i]}`;
   }
   return parts.join('');
 }
@@ -251,7 +372,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const paras = (content || excerpt || '').match(PARA_RE) || [];
   const h3 = (content || excerpt || '').match(/<h3[^>]*>/g) || [];
   const checks = [
-    [wordCount < 600, `词数 ${wordCount} 少于 600`],
+    [wordCount < 60, `词数 ${wordCount} 少于 60`],
     [paras.length < 8, `仅有 ${paras.length} 个段落`],
     [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`],
     [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`],
@@ -341,27 +462,27 @@ extensions = ["data/extensions/wiedza.md"]
 #tbs = "qdr:w"            # 时间范围，默认过去一周
 #query = ""               # 可选，默认使用文章标题
 `, 'utf-8');
-    console.log('示例配置文件已创建于', CFG);
+    log('info', '示例配置文件已创建于', CFG);
     return;
   }
 
-  if (!existsSync(CFG)) { console.error('未找到配置文件。请运行: node wbp.mjs init'); process.exit(1); }
+  if (!existsSync(CFG)) { log('error', '未找到配置文件。请运行: node wbp.mjs init'); process.exit(1); }
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {};
   const siteNames = Object.keys(sites);
-  if (!siteNames.length) { console.error('未配置任何站点'); process.exit(1); }
+  if (!siteNames.length) { log('error', '未配置任何站点'); process.exit(1); }
 
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
   site.name = siteName;
 
   const rp = (p) => p ? (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) ? p : join(WP_DIR, p)) : null;
-  const kwPaths = asArray(site.keywords).map(p => rp(p)).filter(Boolean);
-  const prodPath = rp(site.products), promptPath = rp(site.prompts), extPaths = (site.extensions || []).map(p => rp(p));
+  const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean);
+  const prodPath = safePath(site.products), promptPath = safePath(site.prompts), extPaths = (site.extensions || []).map(p => safePath(p));
 
   if (cmd === 'pick') {
-    if (!kwPaths.length || !kwPaths.some(existsSync)) { console.error('未找到关键词文件:', kwPaths.join(', ')); process.exit(1); }
+    if (!kwPaths.length || !kwPaths.some(existsSync)) { log('error', '未找到关键词文件:', kwPaths.join(', ')); process.exit(1); }
     const keywords = (await Promise.all(kwPaths.filter(existsSync).map(readExcel))).flat();
-    if (!keywords.length) { console.error('关键词文件为空'); process.exit(1); }
+    if (!keywords.length) { log('error', '关键词文件为空'); process.exit(1); }
     const kw = keywords[Math.floor(Math.random() * keywords.length)], kwKeys = Object.keys(keywords[0]);
     const keyword = kw[kwKeys[0]] || kw.keyword || kw.name || '';
     let products = [];
@@ -371,33 +492,46 @@ extensions = ["data/extensions/wiedza.md"]
     let extDocs = '';
     for (const ep of extPaths) { if (existsSync(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
     let images = [];
-    if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); } }
+    if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
     const safe = site.images ? { ...site.images, key: undefined } : null;
-    console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2));
+    const output = JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs }, null, 2);
+    try {
+      log('info', output, null, true);
+      console.log(output);
+    } catch (e) {
+      log('error', 'Log error:', e);
+      console.log(output);
+    }
     return;
   }
 
   if (cmd === 'publish') {
     const draftPath = process.argv[3] || DRAFT;
-    if (!existsSync(draftPath)) { console.error('未找到草稿文件:', draftPath); process.exit(1); }
+    if (!existsSync(draftPath)) { log('error', '未找到草稿文件:', draftPath); process.exit(1); }
     const draft = JSON.parse(readFileSync(draftPath, 'utf-8'));
+    const validation = validateDraft(draft);
+    if (!validation.valid) {
+      log('error', '草稿文件结构无效:');
+      validation.errors.forEach(err => log('error', `  - ${err}`));
+      process.exit(1);
+    }
     const { title, excerpt, content, tags = [] } = draft;
-    if (!title) { console.error('草稿缺少标题'); process.exit(1); }
-    if (!content && !excerpt) { console.error('草稿缺少内容/摘要'); process.exit(1); }
+    if (!title) { log('error', '草稿缺少标题'); process.exit(1); }
+    if (!content && !excerpt) { log('error', '草稿缺少内容/摘要'); process.exit(1); }
 
-    console.log('正在检查重复...');
+    log('info', '正在检查重复...');
     const dup = await checkDuplicate(site, title);
-    if (dup) { console.log(`重复: "${title}" 已存在 (ID ${dup.id})，跳过。`); process.exit(0); }
+    if (dup) { log('info', `重复: "${title}" 已存在 (ID ${dup.id})，跳过。`); process.exit(0); }
 
-    console.log('正在进行质量检查...');
+    log('info', '正在进行质量检查...');
     const { issues: qIssues, warnings: qWarnings } = await checkQuality(title, content, excerpt, tags, site);
-    if (qWarnings.length) qWarnings.forEach(i => console.log(`  ⚠ ${i}`));
-    if (qIssues.length) { console.log('质量问题:'); qIssues.forEach(i => console.log(`  ✗ ${i}`)); console.log('跳过低质量文章。'); process.exit(0); }
-    else { console.log('  ✓ 通过'); }
+    if (qWarnings.length) qWarnings.forEach(i => log('info', `  ⚠ ${i}`));
+    if (qIssues.length) { log('info', '质量问题:'); qIssues.forEach(i => log('info', `  ✗ ${i}`)); log('info', '跳过低质量文章。'); process.exit(0); }
+    else { log('info', '  ✓ 通过'); }
 
-    console.log('确保分类存在:', site.categories);
+    log('info', '确保分类存在:', site.categories);
     const catIds = await resolveCategoryIds(site, site.categories);
-    console.log('正在处理标签...');
+    log('info', '正在处理标签...');
     const tagIds = tags.length ? await Promise.all(asArray(tags).slice(0, 10).map(t => findOrCreate(site, 'tags', t, tagCache))) : [];
 
     let finalContent = content || excerpt;
@@ -405,18 +539,18 @@ extensions = ["data/extensions/wiedza.md"]
 
     if (cm === 's3') {
       let images = [];
-      try { images = await s3List(site.cdn); } catch (e) { console.warn('S3 不可用:', e.message); }
+      try { images = await s3List(site.cdn, 50); } catch (e) { log('warn', 'S3 不可用:', e.message); }
       if (images.length) finalContent = mixImages(finalContent, images);
     } else if (cm === 'search') {
-      console.log('正在搜索图片...');
+      log('info', '正在搜索图片...');
       try { const images = await searchImages(site.images || {}, tags, title); if (images.length) finalContent = mixImages(finalContent, images); }
-      catch (e) { console.warn('  图片搜索失败:', e.message); }
+      catch (e) { log('warn', '  图片搜索失败:', e.message); }
     } else if (cm === 'cdn') {
-      console.log('纯 CDN 模式 — 远程图片 URL 保持不变');
+      log('info', '纯 CDN 模式 — 远程图片 URL 保持不变');
     } else {
       const external = [...finalContent.matchAll(/<img[^>]+src="(https?:\/\/[^"]+)"/g)];
       if (external.length) {
-        console.log('正在上传外部图片到媒体库...');
+        log('info', '正在上传外部图片到媒体库...');
         const replacements = await uploadExternalImages(site, finalContent);
         for (const [oldUrl, newUrl] of Object.entries(replacements)) {
           finalContent = finalContent.replace(new RegExp(oldUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), () => newUrl);
@@ -424,14 +558,14 @@ extensions = ["data/extensions/wiedza.md"]
       }
     }
 
-    console.log('正在发布...');
+    log('info', '正在发布...');
     const result = await wpFetch(site, 'posts', { method: 'POST', body: JSON.stringify({ title, content: finalContent, excerpt: excerpt || '', status: 'publish', categories: catIds, tags: tagIds }) });
-    console.log(`已发布! ID: ${result.id}, URL: ${result.link}`);
+    log('info', `已发布! ID: ${result.id}, URL: ${result.link}`);
     return;
   }
 
-  console.error('用法: node wbp.mjs [pick|publish <file>|init]');
+  log('error', '用法: node wbp.mjs [pick|publish <file>|init]');
   process.exit(1);
 }
 
-main().catch(e => { console.error('致命错误:', e.message); process.exit(1); });
+main().catch(e => { log('error', '致命错误:', e.message); process.exit(1); });

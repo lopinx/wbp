@@ -35,7 +35,7 @@
   },
   "homepage": "https://github.com/lopinx/wbp#readme",
   "dependencies": {
-    "xlsx": "^0.18.5"
+    "exceljs": "^4.4.0"
   },
   "engines": {
     "node": ">=18.0.0"

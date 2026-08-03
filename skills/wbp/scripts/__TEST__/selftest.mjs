@@ -15,6 +15,7 @@ const WP_DIR = join(HOME, '.wbp');
 
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log(`  ✓ ${msg}`); } else { fail++; console.log(`  ✗ ${msg}`); } }
+function error(msg) { fail++; console.log(`  ✗ ${msg}`); }
 function run(cmd, args) { return spawnSync(process.execPath, [cmd, ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8' }); }
 
 // ── 1. 语法检查 ──
@@ -49,7 +50,7 @@ if (d) {
 // ── 4. TOML 解析器深度测试 ──
 console.log('\n## 4. TOML 解析器');
 const src = readFileSync(join(SCRIPT_DIR, 'wbp.mjs'), 'utf-8');
-const tomlFn = src.match(/function parseToml[\s\S]*?\n\}/);
+const tomlFn = src.match(/function isValidKey[\s\S]*?\nfunction parseToml[\s\S]*?\n\}/);
 ok(!!tomlFn, 'parseToml 已定义');
 const pt = eval(`(function() { ${tomlFn[0]}; return parseToml; })()`);
 
@@ -96,6 +97,25 @@ ok(r7.s.text === 'he said "hello"', '转义引号');
 // 多层嵌套节
 const r8 = pt(`[a.b.c]\nx = "deep"`);
 ok(r8.a.b.c.x === 'deep', '深层嵌套节');
+
+// ── 原型污染防护 ──
+console.log('\n## 原型污染防护');
+// 测试非法键名
+const badKeys = ['__proto__', 'constructor', 'prototype'];
+for (const key of badKeys) {
+  try {
+    pt(`[s]\n${key} = "test"`);
+    error(`非法键名 "${key}" 未被阻止`);
+  } catch (e) {
+    ok(e.message.includes('无效的 TOML 键'), `非法键名 "${key}" 被正确阻止`);
+  }
+}
+// 测试合法键名
+ok(pt(`[s]\nvalid_key_123 = "test"`).s.valid_key_123 === 'test', '合法键名通过');
+ok(pt(`[s]\nValidKey = "test"`).s.ValidKey === 'test', '大写合法键名通过');
+ok(pt(`[s]\n_key = "test"`).s._key === 'test', '下划线开头的合法键名通过');
+ok(pt(`[s]\nname = "test"`).s.name === 'test', '合法键名 name 通过');
+ok(pt(`[s]\nlength = 10`).s.length === 10, '合法键名 length 通过');
 
 // ── 5. 去重哈希 ──
 console.log('\n## 5. 去重哈希');

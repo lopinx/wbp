@@ -21,9 +21,12 @@
 | `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试 |
 | `skills/wbp/scripts/install.mjs` | 一键安装脚本，自动检测 AI CLI 创建命令文件 |
 | `skills/wbp/scripts/__TEST__/selftest.mjs` | 78 项自动化测试 |
-| `package.json` | ESM 模块，依赖 xlsx |
-| `AGENTS.md` | AI 代理指引 |
+| `skills/wbp/scripts/package.json` | ESM 模块，依赖 xlsx |
+| `skills/wbp/SKILL.md` | 技能定义文档 |
+| `skills/wbp/references/data/` | 配置数据目录（keywords.xlsx、products.xlsx、prompts.md） |
+| `skills/wbp/references/data/extensions/` | 行业知识扩展文件 |
 | `README.md` | 完整文档 |
+| `CLAUDE.md` | Claude Code 项目记忆 |
 
 ## 图片处理模式
 

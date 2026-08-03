@@ -216,7 +216,7 @@ node --check wbp.mjs # 语法检查
 2. 在项目根目录运行：
 
 ```bash
-zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wbp/scripts/wbp.mjs skills/wbp/scripts/install.mjs skills/wbp/scripts/__TEST__/selftest.mjs skills/wbp/references/data/ package.json
+zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wbp/scripts/wbp.mjs skills/wbp/scripts/install.mjs skills/wbp/scripts/__TEST__/selftest.mjs skills/wbp/references/data/ skills/wbp/scripts/package.json
 ```
 
 3. 生成的 `wbp-skill.zip` 文件即可分发或导入到 AI 工具的技能目录中。
