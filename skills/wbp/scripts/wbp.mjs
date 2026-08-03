@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, writeSync } from 'fs';
 import { homedir } from 'os';
-import { join, resolve } from 'path';
+import { join, resolve, sep } from 'path';
 import { createHash, createHmac } from 'crypto';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
@@ -63,12 +63,13 @@ const asArray = x => Array.isArray(x) ? x : [x];
  * 安全路径解析：相对路径挂到 ~/.wbp 并防目录遍历，绝对路径放行。
  * ponytail: 仅对相对路径做 WP_DIR 越界检查 —— 配置约定相对路径相对 ~/.wbp；
  *   绝对路径（如仓库内数据文件）是合法用例，不受 WP_DIR 约束。
+ *   用 sep 边界 (WP_DIR + sep) 防止 '~/.wbp-xxx' 兄弟目录通过前缀校验绕过。
  */
 function safePath(p) {
   if (!p) return null;
   const isAbs = p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
   const abs = isAbs ? resolve(p) : resolve(WP_DIR, p);
-  if (!isAbs && !abs.startsWith(WP_DIR)) {
+  if (!isAbs && abs !== WP_DIR && !abs.startsWith(WP_DIR + sep)) {
     throw new Error(`路径越界 ~/.wbp: ${p} (解析为 ${abs})`);
   }
   return abs;

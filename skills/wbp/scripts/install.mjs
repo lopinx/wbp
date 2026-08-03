@@ -192,12 +192,19 @@ if (detectedTools.length === 0) {
 }
 
 console.log(`\n=== 安装完成 ===\n核心文件：${join(WP_DIR, 'wbp.mjs')}\n配置文件：${join(WP_DIR, 'setting.toml')}（运行 node wbp.mjs init 创建）`);
-console.log('\n安全建议：');
-console.log('  - 设置环境变量：');
+console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：');
+console.log('  macOS/Linux (bash/zsh)：');
 console.log('    export WP_PASSWORD="your-wordpress-password"');
 console.log('    export AWS_ACCESS_KEY_ID="your-aws-access-key"');
 console.log('    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
-console.log('  - 这样可避免密码明文存储在 TOML 文件中。');
+console.log('  Windows (PowerShell)：');
+console.log('    $env:WP_PASSWORD="your-wordpress-password"');
+console.log('    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"');
+console.log('    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
+console.log('  Windows (cmd)：');
+console.log('    set WP_PASSWORD=your-wordpress-password');
+console.log('    set AWS_ACCESS_KEY_ID=your-aws-access-key');
+console.log('    set AWS_SECRET_ACCESS_KEY=your-aws-secret-key');
 if (detectedTools.length > 0) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 

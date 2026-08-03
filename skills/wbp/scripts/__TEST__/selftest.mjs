@@ -2,6 +2,7 @@
 // selftest.mjs — wbp.mjs 自检（增强版）
 import { existsSync, readFileSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
@@ -9,7 +10,7 @@ import { createHash } from 'crypto';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_DIR = join(__dirname, '..');
 const REF_DATA_DIR = join(SCRIPT_DIR, '../references/data'); // 与第 13 节数据文件检查一致：skills/wbp/references/data
-const HOME = process.env.HOME || process.env.USERPROFILE;
+const HOME = homedir(); // 与 install.mjs 一致：os.homedir() 在三平台稳定，避免 HOME 被改写导致目录不一致
 const WP_DIR = join(HOME, '.wbp');
 
 let pass = 0, fail = 0;
