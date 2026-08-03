@@ -47,6 +47,5 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
-# Documents
-package.json
+# package.json: 根清单已跟踪；scripts 下的清单需显式入库
 !skills/wbp/scripts/package.json
