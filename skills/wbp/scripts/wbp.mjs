@@ -558,9 +558,169 @@ async function doInstall() {
   if (detectedTools.length > 0) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
+/**
+ * 解析分类字符串为数字和名称数组
+ * @param {string} categoriesStr - 分类字符串，逗号分隔
+ * @returns {Array} 分类数组
+ */
+function parseCategories(categoriesStr) {
+  if (!categoriesStr || !categoriesStr.trim()) return [];
+  return categoriesStr.split(',').map(c => c.trim()).filter(c => c);
+}
+
+/**
+ * 将配置对象转换为 TOML 字符串
+ * @param {Object} cfg - 配置对象
+ * @returns {string} TOML 字符串
+ */
+function tomlString(cfg) {
+  const lines = [];
+  for (const [key, value] of Object.entries(cfg)) {
+    if (typeof value === 'object' && value !== null) {
+      lines.push(`[${key}]`);
+      for (const [k, v] of Object.entries(value)) {
+        lines.push(`${k} = ${typeof v === 'string' ? JSON.stringify(v) : v}`);
+      }
+    } else {
+      lines.push(`${key} = ${typeof value === 'string' ? JSON.stringify(value) : value}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * 交互式配置向导
+ * 非交互模式（--non-interactive）使用默认配置
+ */
+async function doConfigWizard() {
+  const isTTY = process.stdin.isTTY;
+
+  if (!isTTY) {
+    log('info', '非交互模式：使用默认配置');
+    // 使用默认配置
+    const defaultConfig = {
+      site: {
+        'myblog': {
+          name: 'My Blog',
+          url: 'https://example.com/wp-json/wp/v2',
+          user: 'admin',
+          pass: 'abcd efgh ijkl mnop',
+          categories: [1, 2, 3],
+          keywords: ['data/keywords.xlsx'],
+          products: 'data/products.xlsx',
+          prompts: 'data/prompts.md',
+          extensions: ['data/extensions/wiedza.md'],
+          cdn: { mode: 's3' }
+        }
+      }
+    };
+    const toml = tomlString(defaultConfig);
+    writeFileSync(CFG, toml, 'utf-8');
+    log('info', '配置文件已创建于', CFG);
+    return;
+  }
+
+  // 交互式模式
+  const readline = await import('readline').then(m => m.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  }));
+
+  const questions = [
+    {
+      key: 'site.name',
+      question: '站点名称',
+      default: 'My Blog',
+      validator: v => v.trim().length > 0 || '站点名称不能为空'
+    },
+    {
+      key: 'site.url',
+      question: 'WP REST API 地址（如 https://example.com/wp-json/wp/v2）',
+      default: 'https://example.com/wp-json/wp/v2',
+      validator: v => /^https?:\/\/.+\/wp-json\/wp\/v2$/.test(v) || 'URL 格式不正确'
+    },
+    {
+      key: 'site.user',
+      question: 'WordPress 用户名',
+      default: 'admin',
+      validator: v => v.trim().length > 0 || '用户名不能为空'
+    },
+    {
+      key: 'site.pass',
+      question: 'WP Application Password',
+      default: 'abcd efgh ijkl mnop',
+      validator: v => v.trim().length >= 10 || '密码长度至少 10 个字符'
+    },
+    {
+      key: 'site.categories',
+      question: '分类（用逗号分隔，可填数字 ID 或名称）',
+      default: '1,2,3',
+      validator: v => parseCategories(v).length > 0 || '至少需要一个分类'
+    },
+    {
+      key: 'site.keywords',
+      question: '关键词文件路径（相对 ~/.wbp 或绝对路径）',
+      default: 'data/keywords.xlsx',
+      validator: v => v.trim().length > 0 || '关键词文件路径不能为空'
+    },
+    {
+      key: 'site.products',
+      question: '产品文件路径（相对 ~/.wbp 或绝对路径）',
+      default: 'data/products.xlsx',
+      validator: v => v.trim().length > 0 || '产品文件路径不能为空'
+    },
+    {
+      key: 'site.prompts',
+      question: '提示文件路径（相对 ~/.wbp 或绝对路径）',
+      default: 'data/prompts.md',
+      validator: v => v.trim().length > 0 || '提示文件路径不能为空'
+    },
+    {
+      key: 'site.extensions',
+      question: '扩展文件路径（多个用逗号分隔，相对 ~/.wbp 或绝对路径）',
+      default: 'data/extensions/wiedza.md',
+      validator: v => parseCategories(v).length > 0 || '至少需要一个扩展文件'
+    },
+    {
+      key: 'site.cdn',
+      question: '图片模式（s3/search/cdn/不配置）',
+      default: 's3',
+      validator: v => ['s3', 'search', 'cdn'].includes(v.toLowerCase()) || '模式必须是 s3/search/cdn'
+    }
+  ];
+
+  const config = {};
+
+  for (const q of questions) {
+    const value = await new Promise(resolve => {
+      readline.question(`${q.question} [${q.default}]: `, input => {
+        resolve(input.trim() || q.default);
+      });
+    });
+
+    // 验证
+    const error = q.validator(value);
+    if (error) {
+      log('error', error);
+      readline.close();
+      process.exit(1);
+    }
+
+    config[q.key] = value;
+  }
+
+  // 写入配置文件
+  const toml = tomlString(config);
+  writeFileSync(CFG, toml, 'utf-8');
+  log('info', '配置文件已创建于', CFG);
+
+  readline.close();
+}
+
 // ── 主函数 ──
 async function main() {
   const cmd = process.argv[2] || 'pick';
+  const nonInteractive = process.argv.includes('--non-interactive');
 
   if (cmd === 'install') {
     await doInstall();
@@ -568,7 +728,11 @@ async function main() {
   }
 
   if (cmd === 'init') {
-    writeFileSync(CFG, `# ~/.wbp/setting.toml
+    if (nonInteractive) {
+      await doConfigWizard();
+    } else {
+      // 交互式创建示例配置
+      writeFileSync(CFG, `# ~/.wbp/setting.toml
 [site.myblog]
 name = "BuchMistrz"
 url = "https://www.buchmistrz.com/wp-json/wp/v2"
@@ -691,6 +855,7 @@ extensions = ["data/extensions/wiedza.md"]
           finalContent = finalContent.replace(new RegExp(oldUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), () => newUrl);
         }
       }
+    }
     }
 
     log('info', '正在发布...');
