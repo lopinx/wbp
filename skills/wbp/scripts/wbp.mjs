@@ -435,7 +435,7 @@ async function doInstall() {
 
   // ── 辅助：检查 CLI 是否存在（白名单 + 安全参数）──
   const checkCLI = (cmd, args = ['--version']) => {
-    if (!new Set(['claude', 'codex', 'opencode', 'hermes', 'openclaw']).has(cmd)) return false;
+    if (!new Set(['claude', 'codex', 'opencode', 'hermes', 'openclaw', 'xiao-u']).has(cmd)) return false;
     const safeArgs = args.filter(a => a.startsWith('-'));
     try { execSync(`${cmd} ${safeArgs.join(' ')}`, { stdio: 'ignore', timeout: 3000 }); return true; } catch { return false; }
   };
@@ -448,6 +448,7 @@ async function doInstall() {
     { name: 'OpenCode',     slug: 'opencode', dir: ['.config', 'opencode', 'commands'],   invoke: '/wbp' },
     { name: 'Hermes',       slug: 'hermes',   dir: ['.hermes', 'commands'],               invoke: '/wbp' },
     { name: 'OpenClaw',     slug: 'openclaw', dir: ['.openclaw', 'commands'],             invoke: '/wbp' },
+    { name: '小U同学',      slug: 'xiao-u',    dir: ['.xiao-u', 'skills', 'wbp'],         invoke: '/wbp' },
   ];
   const detectedTools = TOOLS.filter(t => {
     const found = checkCLI(t.slug) || existsSync(join(homedir(), ...t.dir.slice(0, -1)));
@@ -536,7 +537,7 @@ async function doInstall() {
     writeFileSync(join(tool.configDir, tool.promptFile), prompt, 'utf-8');
     console.log(`  ✓ 已创建 ${tool.name} 命令`);
   }
-  if (detectedTools.length === 0) console.log('\n⚠ 未检测到 AI 工具。请安装 claude/codex/opencode/hermes/openclaw 后重试。');
+  if (detectedTools.length === 0) console.log('\n⚠ 未检测到 AI 工具。请安装 claude/codex/opencode/hermes/openclaw/xiao-u 后重试。');
 
   console.log(`\n=== 安装完成 ===`);
   if (linked) {
