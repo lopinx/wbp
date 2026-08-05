@@ -448,7 +448,7 @@ async function doInstall() {
     { name: 'OpenCode',     slug: 'opencode', dir: ['.config', 'opencode', 'commands'],   invoke: '/wbp' },
     { name: 'Hermes',       slug: 'hermes',   dir: ['.hermes', 'commands'],               invoke: '/wbp' },
     { name: 'OpenClaw',     slug: 'openclaw', dir: ['.openclaw', 'commands'],             invoke: '/wbp' },
-    { name: '小U同学',      slug: 'xiao-u',    dir: ['.uos-ai', 'skills', 'wbp'],         invoke: '/wbp' },
+    { name: '小U同学',      slug: 'uos-ai',    dir: ['.uos-ai', 'skills', 'wbp'],         invoke: '/wbp' },
   ];
   const detectedTools = TOOLS.filter(t => {
     const found = checkCLI(t.slug) || existsSync(join(homedir(), ...t.dir.slice(0, -1)));
