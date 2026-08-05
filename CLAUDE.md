@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-**wbp** (WordPress Publisher) 是一个单文件 Node.js CLI 工具，专为 AI 辅助内容发布设计。兼容 5 种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw）。
+**wbp** (WordPress Publisher) 是一个单文件 Node.js CLI 工具，专为 AI 辅助内容发布设计。兼容 6 种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。
 
 ### 核心工作流
 
