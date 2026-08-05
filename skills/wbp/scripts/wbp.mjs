@@ -463,15 +463,10 @@ async function doInstall() {
     return found ? { ...tool, slug, path: join(homedir(), ...tool.dir) } : null;
   }).filter(Boolean);
 
-  // 过滤出需要安装的工具（仅 Claude Code、Hermes、Agent Skills）
-  const installableTools = detectedTools.filter(t =>
-    ['claude', 'hermes', 'agents'].includes(t.slug)
-  );
-
-  if (installableTools.length === 0) {
-    console.log('\n⚠ 未检测到可安装的 AI 工具（仅支持 Claude Code、Hermes、Agent Skills）。');
-    process.exit(1);
-  }
+  // ── 所有检测到的工具都可安装；未检测到则提供全部候选 ──
+  const installableTools = detectedTools.length > 0
+    ? detectedTools
+    : Object.entries(AGENTS_SKILLS).map(([slug, tool]) => ({ ...tool, slug, path: join(homedir(), ...tool.dir) }));
 
   console.log(`\n检测到 ${installableTools.length} 个可安装工具：${installableTools.map(t => t.name).join(', ')}\n`);
 
@@ -480,20 +475,15 @@ async function doInstall() {
   const isTTY = process.stdin.isTTY;
   let selectedIndices;
 
-  if (!isTTY) {
-    if (nonInteractive) {
-      console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
-      selectedIndices = installableTools.map((_, index) => index);
-    } else {
-      console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
-      selectedIndices = installableTools.map((_, index) => index);
-    }
+  if (!isTTY || nonInteractive) {
+    // 非 TTY 或 --non-interactive：跳过交互，默认安装所有检测到的工具
+    if (!isTTY) console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
+    selectedIndices = installableTools.map((_, index) => index);
   } else {
     selectedIndices = await selectTools(installableTools);
 
     if (selectedIndices.length === 0) {
-      console.log('\n⚠ 未选择任何工具，退出安装。');
-      process.exit(1);
+      console.log('\n⚠ 未选择任何工具，跳过 AI 命令文件创建，继续后续配置。');
     }
   }
 
