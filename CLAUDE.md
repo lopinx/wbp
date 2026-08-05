@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-**wbp** (WordPress Publisher) 是一个单文件 Node.js CLI 工具，专为 AI 辅助内容发布设计。兼容 5 种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw）。
+**wbp** (WordPress Publisher) 是一个单文件 Node.js CLI 工具，专为 AI 辅助内容发布设计。兼容 6 种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。
 
 ### 核心工作流
 
@@ -20,8 +20,8 @@
 
 | 文件 | 说明 |
 |------|------|
-| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试。`wbp install` 子命令负责 npm link 全局化 + 自动检测 AI CLI 创建命令文件 |
-| `skills/wbp/scripts/__TEST__/selftest.mjs` | 97 项自动化测试 |
+| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试、配置向导。`wbp install` 子命令负责 npm link 全局化 + 自动检测 AI CLI 创建命令文件 + 交互式配置向导 |
+| `skills/wbp/scripts/__TEST__/selftest.mjs` | 108 项自动化测试（93% 覆盖率） |
 | `skills/wbp/scripts/package.json` | ESM 模块，依赖 exceljs |
 | `skills/wbp/SKILL.md` | 技能定义文档 |
 | `skills/wbp/references/data/` | 配置数据目录（keywords.xlsx、products.xlsx、prompts.md） |

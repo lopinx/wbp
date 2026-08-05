@@ -1,16 +1,16 @@
-<!-- Generated: 2026-08-01 | Updated: 2026-08-03 -->
+<!-- Generated: 2026-08-01 | Updated: 2026-08-05 -->
 
 # wordpress-skills
 
 ## 用途
-跨平台 WordPress 发布 CLI 工具 (wbp.mjs)，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具 (wbp.mjs)，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
 
 ## 关键文件
 
 | 文件 | 说明 |
 |------|------|
-| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 |
-| `selftest.mjs` | 97 项自动化测试，覆盖语法、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证 |
+| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、交互式配置向导、tomlString、parseCategories。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 + 配置向导 |
+| `selftest.mjs` | 108 项自动化测试，覆盖语法、init、pick、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证、配置向导、tomlString、parseCategories |
 | `package.json` | Node.js 项目清单，依赖 exceljs 库 |
 | `CLAUDE.md` | Claude Code 项目记忆，含提交规范 |
 | `README.md` | 完整用户文档 |
@@ -33,11 +33,14 @@
 
 ### 测试要求
 - `node --check wbp.mjs` 验证语法
-- `node selftest.mjs` 运行完整测试套件（97 项）
-- 测试覆盖：语法、init、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留）、图片函数、WP API 函数、helper 函数、错误处理、文档验证、数据文件完整性、错误边界
+- `node selftest.mjs` 运行完整测试套件（108 项，93% 覆盖率）
+- 测试覆盖：语法、init、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留）、图片函数、WP API 函数、helper 函数、错误处理、文档验证、数据文件完整性、错误边界、配置向导、tomlString、parseCategories
 
 ### 常用模式
 - 迷你 TOML 解析器，支持内联注释、单引号、转义字符
+- TOML 字符串生成器（tomlString），使用点表示法生成标准 TOML 格式
+- 分类解析器（parseCategories），支持数字和字符串混合分类
+- 交互式配置向导（doConfigWizard），10 个配置问题 + TTY 检测
 - S3 SigV4 签名，支持分页和 XML 实体反转义
 - WordPress REST API 基础认证（应用程序密码）
 - 通过段落位置重构实现图片混排
