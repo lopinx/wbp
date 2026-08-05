@@ -433,28 +433,34 @@ async function doInstall() {
   const DATA_DST = join(WP_DIR, 'data');
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
 
+  // ── Agent Skills 路径配置（开放标准）──
+  const AGENTS_SKILLS = {
+    'claude': { name: 'Claude Code', dir: ['.claude', 'skills'], invoke: '/wbp', check: 'claude' },
+    'codex': { name: 'OpenAI Codex', dir: ['.codex', 'skills'], invoke: '@wbp', check: 'codex' },
+    'gemini': { name: 'Gemini CLI', dir: ['.gemini', 'skills'], invoke: '/wbp', check: 'gemini' },
+    'antigravity': { name: 'Antigravity CLI', dir: ['.antigravity', 'skills'], invoke: '/wbp', check: 'antigravity' },
+    'openclaw': { name: 'OpenClaw', dir: ['.openclaw', 'skills'], invoke: '/wbp', check: 'openclaw' },
+    'uos-ai': { name: '小U同学', dir: ['.uos-ai', 'skills'], invoke: '/wbp', check: 'uos-ai' },
+    'cursor': { name: 'Cursor', dir: ['.cursor', 'skills'], invoke: '/wbp', check: 'cursor' },
+    'copilot': { name: 'GitHub Copilot', dir: ['.github', 'skills'], invoke: '/wbp', check: 'copilot' },
+    'opencode': { name: 'OpenCode', dir: ['.config', 'opencode', 'skills'], invoke: '/wbp', check: 'opencode' },
+    'hermes': { name: 'Hermes', dir: ['.hermes', 'skills'], invoke: '/wbp', check: 'hermes' },
+  };
+
   // ── 辅助：检查 CLI 是否存在（白名单 + 安全参数）──
   const checkCLI = (cmd, args = ['--version']) => {
-    if (!new Set(['claude', 'codex', 'opencode', 'hermes', 'openclaw', 'xiao-u']).has(cmd)) return false;
+    if (!new Set(Object.keys(AGENTS_SKILLS)).has(cmd)) return false;
     const safeArgs = args.filter(a => a.startsWith('-'));
     try { execSync(`${cmd} ${safeArgs.join(' ')}`, { stdio: 'ignore', timeout: 3000 }); return true; } catch { return false; }
   };
 
   // ── 检测已安装的 AI CLI ──
   console.log('正在检测已安装的 AI 工具...\n');
-  const TOOLS = [
-    { name: 'Claude Code',  slug: 'claude',    dir: ['.claude', 'commands'],               invoke: '/wbp' },
-    { name: 'OpenAI Codex', slug: 'codex',    dir: ['.codex', 'prompts'],                 invoke: '@wbp' },
-    { name: 'OpenCode',     slug: 'opencode', dir: ['.config', 'opencode', 'commands'],   invoke: '/wbp' },
-    { name: 'Hermes',       slug: 'hermes',   dir: ['.hermes', 'commands'],               invoke: '/wbp' },
-    { name: 'OpenClaw',     slug: 'openclaw', dir: ['.openclaw', 'commands'],             invoke: '/wbp' },
-    { name: '小U同学',      slug: 'uos-ai',    dir: ['.uos-ai', 'skills', 'wbp'],         invoke: '/wbp' },
-  ];
-  const detectedTools = TOOLS.filter(t => {
-    const found = checkCLI(t.slug) || existsSync(join(homedir(), ...t.dir.slice(0, -1)));
-    console.log(found ? `  ✓ 检测到 ${t.name}` : `  ✗ 未找到 ${t.name}`);
-    return found;
-  }).map(t => ({ ...t, configDir: join(homedir(), ...t.dir), promptFile: 'wbp.md' }));
+  const detectedTools = Object.entries(AGENTS_SKILLS).map(([slug, tool]) => {
+    const found = checkCLI(slug) || existsSync(join(homedir(), ...tool.dir.slice(0, -1)));
+    console.log(found ? `  ✓ 检测到 ${tool.name}` : `  ✗ 未找到 ${tool.name}`);
+    return found ? { ...tool, slug, configDir: join(homedir(), ...tool.dir), promptFile: 'skill.md' } : null;
+  }).filter(Boolean);
   console.log(`\n检测到 ${detectedTools.length} 个工具：${detectedTools.map(t => t.name).join(', ')}\n`);
 
   // ── npm link 全局化：一处安装，全局调用 ──
@@ -537,7 +543,7 @@ async function doInstall() {
     writeFileSync(join(tool.configDir, tool.promptFile), prompt, 'utf-8');
     console.log(`  ✓ 已创建 ${tool.name} 命令`);
   }
-  if (detectedTools.length === 0) console.log('\n⚠ 未检测到 AI 工具。请安装 claude/codex/opencode/hermes/openclaw/xiao-u 后重试。');
+  if (detectedTools.length === 0) console.log('\n⚠ 未检测到 AI 工具。请安装 Claude Code、Codex、Gemini CLI、Antigravity CLI、OpenClaw、UOS AI、Cursor、GitHub Copilot、OpenCode、Hermes 后重试。');
 
   console.log(`\n=== 安装完成 ===`);
   if (linked) {
