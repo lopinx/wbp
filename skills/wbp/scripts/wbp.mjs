@@ -556,6 +556,10 @@ async function doInstall() {
   console.log('    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"');
   console.log('    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
   if (detectedTools.length > 0) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+
+  // ── 生成配置文件（交互式或非交互式）──
+  console.log('\n=== 生成配置文件 ===');
+  await doConfigWizard();
 }
 
 /**
