@@ -41,18 +41,22 @@ function tomlString(cfg) {
     }
   }
 
-  for (const [key, value] of Object.entries(cfg)) {
-    if (typeof value === 'object' && value !== null) {
-      // 嵌套对象
-      lines.push(`[${key}]`);
-      for (const [k, v] of Object.entries(value)) {
-        lines.push(`${k} = ${stringifyValue(v)}`);
+  function processObject(obj, prefix = '') {
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'object' && value !== null) {
+        if (Array.isArray(value)) {
+          lines.push(`${fullKey} = ${JSON.stringify(value)}`);
+        } else {
+          processObject(value, fullKey);
+        }
+      } else {
+        lines.push(`${fullKey} = ${stringifyValue(value)}`);
       }
-    } else {
-      // 简单值
-      lines.push(`${key} = ${stringifyValue(value)}`);
     }
   }
+
+  processObject(cfg);
   return lines.join('\n');
 }
 
@@ -351,13 +355,13 @@ const defaultConfig = {
   }
 };
 const cfgContent = tomlString(defaultConfig);
-ok(cfgContent.includes('[site.myblog]'), '包含站点配置');
+ok(cfgContent.includes('site.myblog.name = "My Blog"'), '包含站点名称');
 ok(cfgContent.includes('url = "https://example.com/wp-json/wp/v2"'), '包含默认 URL');
 ok(cfgContent.includes('user = "admin"'), '包含默认用户名');
 ok(cfgContent.includes('pass = "abcd efgh ijkl mnop"'), '包含默认密码');
-ok(cfgContent.includes('categories = [1, 2, 3]'), '包含默认分类');
+ok(cfgContent.includes('categories = [1,2,3]'), '包含默认分类');
 ok(cfgContent.includes('keywords = ["data/keywords.xlsx"]'), '包含默认关键词文件');
-ok(cfgContent.includes('cdn = { mode = "s3" }'), '包含默认 S3 配置');
+ok(cfgContent.includes('cdn.mode = "s3"'), '包含默认 S3 配置');
 
 // 17.3 测试 parseCategories
 console.log('\n  17.3 分类解析测试');
@@ -386,16 +390,14 @@ const testObj = {
   cdn: { mode: 's3' }
 };
 const tomlStr = tomlString(testObj);
-ok(tomlStr.includes('[site."myblog"]'), '站点名正确转义');
-ok(tomlStr.includes('url = "https://example.com"'), 'URL 正确转义');
-ok(tomlStr.includes('cdn = { mode = "s3" }'), 'CDN 配置正确');
+ok(tomlStr.includes('site.myblog.url = "https://example.com"'), 'URL 正确转义');
+ok(tomlStr.includes('cdn.mode = "s3"'), 'CDN 配置正确');
 
 // 17.6 测试非 TTY 环境直接使用默认配置
 console.log('\n  17.6 非 TTY 环境默认配置');
-const testCfg = `[site.test]
-url = "https://test.com"
-user = "test"
-pass = "test"`;
+const testCfg = `site.test.url = "https://test.com"
+site.test.user = "test"
+site.test.pass = "test"`;
 writeFileSync(join(WP_DIR, 'setting.toml'), testCfg);
 const expectedCfg = tomlString(defaultConfig);
 const rInit3 = run('wbp.mjs', ['init'], { stdio: ['pipe', 'pipe', 'pipe'], input: '' });
@@ -408,23 +410,17 @@ if (existsSync(join(WP_DIR, 'setting.toml'))) unlinkSync(join(WP_DIR, 'setting.t
 
 // 17.7 测试站点点名验证
 console.log('\n  17.7 验证站点点名验证');
-const rInit4 = run('wbp.mjs', ['init'], {
-  input: 'my-blog\nhttps://x.com/wp-json/wp/v2\nadmin\npass\n\n\n\n\n'
-});
+const rInit4 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: 'my-blog\nhttps://x.com/wp-json/wp/v2\nadmin\npass\n\n\n\n\n' });
 ok(rInit4.status !== 0, '非法站点点名退出码非零');
 
 // 17.8 测试 URL 格式验证
 console.log('\n  17.8 验证 URL 格式验证');
-const rInit5 = run('wbp.mjs', ['init'], {
-  input: 'myblog\ninvalid-url\nadmin\npass\n\n\n\n\n\n'
-});
+const rInit5 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: 'myblog\ninvalid-url\nadmin\npass\n\n\n\n\n\n' });
 ok(rInit5.status !== 0, '格式错误的 URL 退出码非零');
 
 // 17.9 测试密码格式验证
 console.log('\n  17.9 验证密码格式验证');
-const rInit6 = run('wbp.mjs', ['init'], {
-  input: 'myblog\nhttps://x.com/wp-json/wp/v2\nshort\n\n\n\n\n\n'
-});
+const rInit6 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: 'myblog\nhttps://x.com/wp-json/wp/v2\nshort\n\n\n\n\n\n' });
 ok(rInit6.status !== 0, '格式错误的密码 退出码非零');
 const rInit7 = run('wbp.mjs', ['init', '--non-interactive']);
 ok(rInit7.status === 0, '图片模式选择成功');

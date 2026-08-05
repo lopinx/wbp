@@ -580,6 +580,7 @@ function tomlString(cfg) {
     if (Array.isArray(value)) {
       return JSON.stringify(value);
     } else if (typeof value === 'object' && value !== null) {
+      // 递归处理嵌套对象
       const nested = [];
       for (const [k, v] of Object.entries(value)) {
         nested.push(`${k} = ${stringifyValue(v)}`);
@@ -590,18 +591,23 @@ function tomlString(cfg) {
     }
   }
 
-  for (const [key, value] of Object.entries(cfg)) {
-    if (typeof value === 'object' && value !== null) {
-      // 嵌套对象
-      lines.push(`[${key}]`);
-      for (const [k, v] of Object.entries(value)) {
-        lines.push(`${k} = ${stringifyValue(v)}`);
+  function processObject(obj, prefix = '') {
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'object' && value !== null) {
+        if (Array.isArray(value)) {
+          lines.push(`${fullKey} = ${JSON.stringify(value)}`);
+        } else {
+          // 嵌套对象，继续递归
+          processObject(value, fullKey);
+        }
+      } else {
+        lines.push(`${fullKey} = ${stringifyValue(value)}`);
       }
-    } else {
-      // 简单值
-      lines.push(`${key} = ${stringifyValue(value)}`);
     }
   }
+
+  processObject(cfg);
   return lines.join('\n');
 }
 
