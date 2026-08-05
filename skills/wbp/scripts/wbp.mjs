@@ -459,9 +459,45 @@ async function doInstall() {
   const detectedTools = Object.entries(AGENTS_SKILLS).map(([slug, tool]) => {
     const found = checkCLI(slug) || existsSync(join(homedir(), ...tool.dir.slice(0, -1)));
     console.log(found ? `  ✓ 检测到 ${tool.name}` : `  ✗ 未找到 ${tool.name}`);
-    return found ? { ...tool, slug, configDir: join(homedir(), ...tool.dir), promptFile: 'skill.md' } : null;
+    return found ? { ...tool, slug, path: join(homedir(), ...tool.dir) } : null;
   }).filter(Boolean);
-  console.log(`\n检测到 ${detectedTools.length} 个工具：${detectedTools.map(t => t.name).join(', ')}\n`);
+
+  // 过滤出需要安装的工具（仅 Claude Code、Hermes、Agent Skills）
+  const installableTools = detectedTools.filter(t =>
+    ['claude', 'hermes', 'agents'].includes(t.slug)
+  );
+
+  if (installableTools.length === 0) {
+    console.log('\n⚠ 未检测到可安装的 AI 工具（仅支持 Claude Code、Hermes、Agent Skills）。');
+    process.exit(1);
+  }
+
+  console.log(`\n检测到 ${installableTools.length} 个可安装工具：${installableTools.map(t => t.name).join(', ')}\n`);
+
+  // ── 交互式选择工具 ──
+  const isTTY = process.stdin.isTTY;
+  let selectedIndices;
+
+  if (!isTTY) {
+    console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
+    selectedIndices = installableTools.map((_, index) => index);
+  } else {
+    selectedIndices = await selectTools(installableTools);
+
+    if (selectedIndices.length === 0) {
+      console.log('\n⚠ 未选择任何工具，退出安装。');
+      process.exit(1);
+    }
+  }
+
+  const selectedTools = selectedIndices.map(i => installableTools[i]);
+
+  // ── 为选中的工具创建命令文件 ──
+  console.log('\n正在创建 AI 工具命令文件...\n');
+  for (const tool of selectedTools) {
+    const promptContent = generatePromptContent(tool);
+    createCommandFile(tool, promptContent);
+  }
 
   // ── npm link 全局化：一处安装，全局调用 ──
   console.log('=== 注册全局命令（npm link）===');
@@ -526,25 +562,7 @@ async function doInstall() {
     await wb.xlsx.writeFile(productsPath);
   }
 
-  // ── 生成 AI 工具命令文件 ──
-  const wpPath = WP_DIR.replace(/\\/g, '/');
-  const draftPath = `${wpPath}/_draft.json`;
-  let runCmd;
-  if (linked) {
-    runCmd = 'wbp';
-  } else {
-    writeFileSync(join(WP_DIR, 'wbp.mjs'), readFileSync(SRC_MJS, 'utf-8'), 'utf-8');
-    console.log('wbp.mjs 已复制到', join(WP_DIR, 'wbp.mjs'), '(回退模式)');
-    runCmd = `node ${wpPath}/wbp.mjs`;
-  }
-  const prompt = `# WordPress Publisher\n\n1. Run \`${runCmd} pick\` → keyword + config\n2. Write Chinese blog post (title, excerpt, tags, HTML)\n3. Save to ${draftPath}\n4. Run \`${runCmd} publish\`\n`;
-  for (const tool of detectedTools) {
-    if (!existsSync(tool.configDir)) mkdirSync(tool.configDir, { recursive: true });
-    writeFileSync(join(tool.configDir, tool.promptFile), prompt, 'utf-8');
-    console.log(`  ✓ 已创建 ${tool.name} 命令`);
-  }
-  if (detectedTools.length === 0) console.log('\n⚠ 未检测到 AI 工具。请安装 Claude Code、Codex、Gemini CLI、Antigravity CLI、OpenClaw、UOS AI、Cursor、GitHub Copilot、OpenCode、Hermes 后重试。');
-
+  // ── 生成配置文件（交互式或非交互式）──
   console.log(`\n=== 安装完成 ===`);
   if (linked) {
     console.log(`全局命令：wbp（任意目录可用：wbp pick / wbp publish / wbp init）`);
@@ -567,6 +585,203 @@ async function doInstall() {
   // ── 生成配置文件（交互式或非交互式）──
   console.log('\n=== 生成配置文件 ===');
   await doConfigWizard();
+}
+
+/**
+ * 生成提示词内容
+ * @param {Object} tool - 工具配置对象
+ * @returns {string} 提示词内容
+ */
+function generatePromptContent(tool) {
+  const { name, invoke } = tool;
+  return `# WordPress Publisher Skill
+
+## Purpose
+跨平台 WordPress 发布 CLI 工具，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+
+## When to Activate
+- 用户说 "发布文章"、"写博客"、"publish"、"wordpress"
+- 需要自动生成并发布 WordPress 文章
+
+## Workflow
+
+### 0. 安装和配置（首次使用）
+\`\`\`bash
+wbp install              # 交互式配置向导
+# 或
+wbp install --non-interactive  # 非交互式模式，使用默认配置
+\`\`\`
+
+安装脚本会自动：
+- 全局化 npm link（\`npm link\`）
+- 检测本地 AI CLI 并创建命令文件
+- 启动交互式配置向导（10 个问题）或生成默认配置
+
+### 1. 选取关键词
+\`\`\`bash
+wbp pick
+\`\`\`
+输出 JSON 包含：\`site\`、\`keyword\`、\`keywordRow\`、\`products\`、\`prompts\`、\`extensions\`、\`images\`
+（未全局化时改用 \`node ~/.wbp/wbp.mjs pick\`）
+
+### 2. 撰写文章
+基于关键词、产品数据、写作提示词和扩展知识，撰写文章草稿。
+
+### 3. 保存草稿
+写入 \`~/.wbp/_draft.json\`：
+\`\`\`json
+{
+  "title": "文章标题（40-70字符）",
+  "excerpt": "摘要（120-160字符）",
+  "content": "<p>HTML内容</p><h3>小标题</h3><p>...</p>",
+  "tags": ["标签1", "标签2", "标签3"]
+}
+\`\`\`
+
+### 4. 发布文章
+\`\`\`bash
+wbp publish ~/.wbp/_draft.json
+\`\`\`
+
+自动流程：去重检查 → 质量检查 → 分类/标签创建 → 图片处理 → 发布
+
+## 内容要求
+
+### 语言
+- 使用波兰语（polski）撰写
+- 风格：informacyjny, praktyczny, przyjazny
+- 语气：ekspercki ale przystępny
+
+### 标题风格
+- 以问题形式开头：Jak...? Czy...? Dlaczego...?
+- 或包含关键词+冒号+承诺
+- 标题长度 40-70 znaków
+
+### 内容结构
+1. **Wstęp**（引言 1-2段）：hook 式开头
+2. **Rozwinięcie**（主体 3-5 个小标题 H3）
+3. **Podsumowanie**（总结 1段 + CTA）
+
+### SEO 要求
+- 摘要（excerpt）120-160 znaków
+- 标签 3-5 个，波兰语，小写
+- 正文自然嵌入关键词，每100词1-2次
+- 800-1500 słów
+
+## 质量检查标准
+- 词数 ≥ 60（波兰语）
+- 段落数 ≥ 8
+- H3标题 ≥ 3
+- 标题长度 ≥ 10 字符
+- 摘要长度 ≥ 50 字符
+- 标签数 3-10 个
+- 死链检查
+- 内链警告
+- 内链 ≥ 3（指向站内产品、服务、分类页、文章详情页，锚文本含关键词）
+- 关键词密度：主词 5-8 次，次词 2-4 次
+- E-E-A-T 外部权威外链 ≥ 1（指向政府/行业机构/权威媒体）
+
+## 图片处理模式
+| 模式 | 配置 | 行为 |
+|------|------|------|
+| S3 | \`mode = "s3"\` | 从 S3 兼容存储列出图片，随机混排插入段落间 |
+| 图片搜索 | \`mode = "search"\` | 通过 Serper.dev 等 API 搜索图片（多 key 随机轮询），混排插入段落间 |
+| CDN | \`mode = "cdn"\` | 保留内容中的远程图片 URL 不变 |
+| 媒体库 | 无 cdn 节点 | 下载外部图片上传到 WP 媒体库，替换 URL |
+
+## 多站点支持
+在 \`setting.toml\` 中配置多个 \`[site.xxx]\` 节点，\`pick\` 时随机选择一个站点。
+
+## 示例
+
+\`\`\`
+/wbp 发布一篇关于电子烟的文章
+/wbp 发布5篇关于一次性电子烟的文章
+/wbp publish an article about Elf Bar
+\`\`\`
+
+## 注意事项
+- 始终先执行 \`wbp pick\` 获取关键词和配置
+- 草稿 JSON 必须包含 title、content/excerpt、tags
+- 发布前会自动检查重复标题和质量
+- 如果质量检查不通过，需要补充内容后再发布
+- 安装脚本会自动检测本地 AI CLI，仅为已安装的工具创建命令文件
+`;
+}
+
+/**
+ * 创建命令文件
+ * @param {Object} tool - 工具配置对象
+ * @param {string} content - 命令文件内容
+ */
+function createCommandFile(tool, content) {
+  const { slug, dir, invoke } = tool;
+  const filePath = join(homedir(), ...dir, 'wbp.skill.md');
+
+  // 确保目录存在
+  try {
+    const parentDir = dirname(filePath);
+    if (!existsSync(parentDir)) {
+      mkdirSync(parentDir, { recursive: true });
+    }
+    // 写入命令文件
+    writeFileSync(filePath, content, 'utf8');
+    console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`);
+  } catch (e) {
+    console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`);
+  }
+}
+
+/**
+ * 解析用户选择输入
+ * @param {string} answer - 用户输入
+ * @param {number} total - 选项总数
+ * @returns {Array} 选中的索引数组
+ */
+function parseSelection(answer, total) {
+  if (!answer) return [];
+
+  const lowerAnswer = answer.toLowerCase().trim();
+
+  // 支持 "all" 选择全部
+  if (lowerAnswer === 'all') {
+    return Array.from({ length: total }, (_, i) => i);
+  }
+
+  // 解析逗号分隔的数字
+  const indices = lowerAnswer.split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(i => !isNaN(i) && i >= 1 && i <= total);
+
+  return indices.length > 0 ? indices : [];
+}
+
+/**
+ * 交互式选择工具
+ * @param {Array} tools - 可安装工具列表
+ * @returns {Promise<Array>} 选中的工具索引数组
+ */
+async function selectTools(tools) {
+  return new Promise((resolve) => {
+    console.log('\n请选择要安装的 AI 工具：\n');
+    tools.forEach((tool, index) => {
+      console.log(`${index + 1}. ${tool.name} — ${tool.path}`);
+    });
+    console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：');
+
+    // 使用 readline 读取用户输入
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    rl.question('', (answer) => {
+      rl.close();
+      const selected = parseSelection(answer, tools.length);
+      resolve(selected);
+    });
+  });
 }
 
 /**
