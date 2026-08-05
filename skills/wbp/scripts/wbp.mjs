@@ -5,6 +5,7 @@ import { join, resolve, sep, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { createHash, createHmac } from 'crypto';
+import readline from 'readline';
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wbp'), CFG = join(WP_DIR, 'setting.toml'), DRAFT = join(WP_DIR, '_draft.json');
 
@@ -475,12 +476,18 @@ async function doInstall() {
   console.log(`\n检测到 ${installableTools.length} 个可安装工具：${installableTools.map(t => t.name).join(', ')}\n`);
 
   // ── 交互式选择工具 ──
+  const nonInteractive = process.argv.includes('--non-interactive');
   const isTTY = process.stdin.isTTY;
   let selectedIndices;
 
   if (!isTTY) {
-    console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
-    selectedIndices = installableTools.map((_, index) => index);
+    if (nonInteractive) {
+      console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
+      selectedIndices = installableTools.map((_, index) => index);
+    } else {
+      console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
+      selectedIndices = installableTools.map((_, index) => index);
+    }
   } else {
     selectedIndices = await selectTools(installableTools);
 
@@ -584,7 +591,7 @@ async function doInstall() {
 
   // ── 生成配置文件（交互式或非交互式）──
   console.log('\n=== 生成配置文件 ===');
-  await doConfigWizard();
+  await doConfigWizard(nonInteractive);
 }
 
 /**
@@ -770,7 +777,6 @@ async function selectTools(tools) {
     console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：');
 
     // 使用 readline 读取用户输入
-    const readline = require('readline');
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
@@ -779,7 +785,12 @@ async function selectTools(tools) {
     rl.question('', (answer) => {
       rl.close();
       const selected = parseSelection(answer, tools.length);
-      resolve(selected);
+      if (selected.length === 0) {
+        console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n');
+        resolve([]); // 返回空数组而不是立即退出
+      } else {
+        resolve(selected);
+      }
     });
   });
 }
@@ -841,8 +852,33 @@ function tomlString(cfg) {
  * 交互式配置向导
  * 非交互模式（--non-interactive）使用默认配置
  */
-async function doConfigWizard() {
+async function doConfigWizard(nonInteractive = false) {
   const isTTY = process.stdin.isTTY === true;
+
+  if (nonInteractive) {
+    log('info', '非交互模式：使用默认配置');
+    // 使用默认配置
+    const defaultConfig = {
+      site: {
+        'myblog': {
+          name: 'My Blog',
+          url: 'https://example.com/wp-json/wp/v2',
+          user: 'admin',
+          pass: 'abcd efgh ijkl mnop',
+          categories: [1, 2, 3],
+          keywords: ['data/keywords.xlsx'],
+          products: 'data/products.xlsx',
+          prompts: 'data/prompts.md',
+          extensions: ['data/extensions/wiedza.md'],
+          cdn: { mode: 's3' }
+        }
+      }
+    };
+    const toml = tomlString(defaultConfig);
+    writeFileSync(CFG, toml, 'utf-8');
+    log('info', '配置文件已创建于', CFG);
+    return;
+  }
 
   if (!isTTY) {
     log('info', '非交互模式：使用默认配置');
@@ -951,7 +987,11 @@ async function doConfigWizard() {
     const error = q.validator(value);
     if (error) {
       log('error', error);
-      readline.close();
+      try {
+        readline.close();
+      } catch (e) {
+        // readline 可能已经关闭，忽略错误
+      }
       process.exit(1);
     }
 
