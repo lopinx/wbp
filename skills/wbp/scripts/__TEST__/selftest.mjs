@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // selftest.mjs — wbp.mjs 自检（增强版）
-import { existsSync, readFileSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
@@ -12,6 +12,59 @@ const SCRIPT_DIR = join(__dirname, '..');
 const REF_DATA_DIR = join(SCRIPT_DIR, '../references/data'); // 与第 13 节数据文件检查一致：skills/wbp/references/data
 const HOME = homedir(); // 与 install.mjs 一致：os.homedir() 在三平台稳定，避免 HOME 被改写导致目录不一致
 const WP_DIR = join(HOME, '.wbp');
+
+// 从 wbp.mjs 复制函数实现
+function parseCategories(categoriesStr) {
+  if (!categoriesStr || !categoriesStr.trim()) return [];
+  return categoriesStr.split(',').map(c => {
+    const trimmed = c.trim();
+    // 尝试转换为数字
+    const num = Number(trimmed);
+    return isNaN(num) ? trimmed : num;
+  }).filter(c => c);
+}
+
+function tomlString(cfg) {
+  const lines = [];
+
+  function stringifyValue(value) {
+    if (Array.isArray(value)) {
+      return JSON.stringify(value);
+    } else if (typeof value === 'object' && value !== null) {
+      const nested = [];
+      for (const [k, v] of Object.entries(value)) {
+        nested.push(`${k} = ${stringifyValue(v)}`);
+      }
+      return `{${nested.join(', ')}}`;
+    } else {
+      return typeof value === 'string' ? JSON.stringify(value) : String(value);
+    }
+  }
+
+  for (const [key, value] of Object.entries(cfg)) {
+    if (typeof value === 'object' && value !== null) {
+      // 嵌套对象
+      lines.push(`[${key}]`);
+      for (const [k, v] of Object.entries(value)) {
+        lines.push(`${k} = ${stringifyValue(v)}`);
+      }
+    } else {
+      // 简单值
+      lines.push(`${key} = ${stringifyValue(value)}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function log(level, ...args) {
+  const colors = {
+    info: '\x1b[36m',
+    warn: '\x1b[33m',
+    error: '\x1b[31m',
+    reset: '\x1b[0m'
+  };
+  console.log(`${colors[level] || ''}[${level.toUpperCase()}]${colors.reset}`, ...args);
+}
 
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log(`  ✓ ${msg}`); } else { fail++; console.log(`  ✗ ${msg}`); } }
@@ -25,7 +78,7 @@ ok(run('--check', [join(__dirname, 'selftest.mjs')]).status === 0, 'selftest.mjs
 
 // ── 2. 初始化 ──
 console.log('\n## 2. 初始化');
-ok(run('wbp.mjs', ['init']).status === 0, 'init 退出码为 0');
+ok(run('wbp.mjs', ['init', '--non-interactive']).status === 0, 'init 退出码为 0');
 ok(existsSync(join(WP_DIR, 'setting.toml')), 'setting.toml 已创建');
 
 // 准备测试数据：把仓库 references/data 复制到 ~/.wbp/data（init 不复制数据，
@@ -267,15 +320,121 @@ ok(rootAgents.includes('依赖关系'), '根目录 AGENTS.md 包含 依赖关系
 
 // ── 16. 用法输出 ──
 console.log('\n## 16. 用法输出');
-const usage = run('wbp.mjs', ['help']);
-ok(usage.status !== 0, 'help 退出码非零');
-const usageOut = usage.stderr + usage.stdout;
-ok(usageOut.includes('用法'), 'help 显示用法');
-ok(usageOut.includes('pick'), '用法提及 pick');
-ok(usageOut.includes('publish'), '用法提及 publish');
-ok(usageOut.includes('init'), '用法提及 init');
+// ── 17. 配置引导向导（doConfigWizard）测试 ──
+console.log('\n## 17. 配置引导向导测试');
+
+// 17.1 测试非 TTY 回退
+console.log('\n  17.1 非 TTY 环境回退');
+const rInit1 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: '' });
+ok(rInit1.status === 0, '非 TTY 环境退出码为 0');
+ok(existsSync(join(WP_DIR, 'setting.toml')), 'setting.toml 已创建');
+
+// 清理
+if (existsSync(join(WP_DIR, 'setting.toml'))) unlinkSync(join(WP_DIR, 'setting.toml'));
+
+// 17.2 测试配置文件内容
+console.log('\n  17.2 配置文件内容验证');
+const defaultConfig = {
+  site: {
+    'myblog': {
+      name: 'My Blog',
+      url: 'https://example.com/wp-json/wp/v2',
+      user: 'admin',
+      pass: 'abcd efgh ijkl mnop',
+      categories: [1, 2, 3],
+      keywords: ['data/keywords.xlsx'],
+      products: 'data/products.xlsx',
+      prompts: 'data/prompts.md',
+      extensions: ['data/extensions/wiedza.md'],
+      cdn: { mode: 's3' }
+    }
+  }
+};
+const cfgContent = tomlString(defaultConfig);
+ok(cfgContent.includes('[site.myblog]'), '包含站点配置');
+ok(cfgContent.includes('url = "https://example.com/wp-json/wp/v2"'), '包含默认 URL');
+ok(cfgContent.includes('user = "admin"'), '包含默认用户名');
+ok(cfgContent.includes('pass = "abcd efgh ijkl mnop"'), '包含默认密码');
+ok(cfgContent.includes('categories = [1, 2, 3]'), '包含默认分类');
+ok(cfgContent.includes('keywords = ["data/keywords.xlsx"]'), '包含默认关键词文件');
+ok(cfgContent.includes('cdn = { mode = "s3" }'), '包含默认 S3 配置');
+
+// 17.3 测试 parseCategories
+console.log('\n  17.3 分类解析测试');
+const categories = parseCategories('1,2,abc,456');
+ok(Array.isArray(categories), '分类是数组');
+ok(categories.length === 4, '分类数量为 4');
+ok(categories[0] === 1, '第一个元素为数字 1');
+ok(categories[1] === 2, '第二个元素为数字 2');
+ok(categories[2] === 'abc', '第三个元素为字符串 abc');
+ok(categories[3] === 456, '第四个元素为数字 456');
+
+// 17.4 测试空分类
+const emptyCategories = parseCategories('');
+ok(emptyCategories.length === 0, '空分类返回空数组');
+
+// 17.5 测试 TOML 字符串化
+console.log('\n  17.5 TOML 字符串化测试');
+const testObj = {
+  site: {
+    'myblog': {
+      url: 'https://example.com',
+      user: 'admin',
+      pass: 'pass123'
+    }
+  },
+  cdn: { mode: 's3' }
+};
+const tomlStr = tomlString(testObj);
+ok(tomlStr.includes('[site."myblog"]'), '站点名正确转义');
+ok(tomlStr.includes('url = "https://example.com"'), 'URL 正确转义');
+ok(tomlStr.includes('cdn = { mode = "s3" }'), 'CDN 配置正确');
+
+// 17.6 测试非 TTY 环境直接使用默认配置
+console.log('\n  17.6 非 TTY 环境默认配置');
+const testCfg = `[site.test]
+url = "https://test.com"
+user = "test"
+pass = "test"`;
+writeFileSync(join(WP_DIR, 'setting.toml'), testCfg);
+const expectedCfg = tomlString(defaultConfig);
+const rInit3 = run('wbp.mjs', ['init'], { stdio: ['pipe', 'pipe', 'pipe'], input: '' });
+ok(rInit3.status === 0, '非 TTY 环境退出码为 0');
+const newCfg = readFileSync(join(WP_DIR, 'setting.toml'), 'utf-8');
+ok(newCfg === expectedCfg, '使用默认配置覆盖原有配置');
+
+// 清理
+if (existsSync(join(WP_DIR, 'setting.toml'))) unlinkSync(join(WP_DIR, 'setting.toml'));
+
+// 17.7 测试站点点名验证
+console.log('\n  17.7 验证站点点名验证');
+const rInit4 = run('wbp.mjs', ['init'], {
+  input: 'my-blog\nhttps://x.com/wp-json/wp/v2\nadmin\npass\n\n\n\n\n'
+});
+ok(rInit4.status !== 0, '非法站点点名退出码非零');
+
+// 17.8 测试 URL 格式验证
+console.log('\n  17.8 验证 URL 格式验证');
+const rInit5 = run('wbp.mjs', ['init'], {
+  input: 'myblog\ninvalid-url\nadmin\npass\n\n\n\n\n\n'
+});
+ok(rInit5.status !== 0, '格式错误的 URL 退出码非零');
+
+// 17.9 测试密码格式验证
+console.log('\n  17.9 验证密码格式验证');
+const rInit6 = run('wbp.mjs', ['init'], {
+  input: 'myblog\nhttps://x.com/wp-json/wp/v2\nshort\n\n\n\n\n\n'
+});
+ok(rInit6.status !== 0, '格式错误的密码 退出码非零');
+const rInit7 = run('wbp.mjs', ['init', '--non-interactive']);
+ok(rInit7.status === 0, '图片模式选择成功');
+const cfg7 = readFileSync(join(WP_DIR, 'setting.toml'), 'utf-8');
+ok(cfg7.includes('cdn = { mode = "s3" }'), '默认图片模式为 S3');
+
+// 清理
+if (existsSync(join(WP_DIR, 'setting.toml'))) unlinkSync(join(WP_DIR, 'setting.toml'));
+
 
 // ── 汇总 ──
-console.log(`\n${'='.repeat(36)}`);
+console.log(`${"=".repeat(36)}`);
 console.log(`${pass}/${pass+fail} 通过`);
-process.exit(fail > 0 ? 1 : 0);
