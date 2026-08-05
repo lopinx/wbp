@@ -575,16 +575,39 @@ function parseCategories(categoriesStr) {
  */
 function tomlString(cfg) {
   const lines = [];
-  for (const [key, value] of Object.entries(cfg)) {
-    if (typeof value === 'object' && value !== null) {
-      lines.push(`[${key}]`);
+
+  function stringifyValue(value) {
+    if (Array.isArray(value)) {
+      return JSON.stringify(value);
+    } else if (typeof value === 'object' && value !== null) {
+      // 递归处理嵌套对象
+      const nested = [];
       for (const [k, v] of Object.entries(value)) {
-        lines.push(`${k} = ${typeof v === 'string' ? JSON.stringify(v) : v}`);
+        nested.push(`${k} = ${stringifyValue(v)}`);
       }
+      return `{${nested.join(', ')}}`;
     } else {
-      lines.push(`${key} = ${typeof value === 'string' ? JSON.stringify(value) : value}`);
+      return typeof value === 'string' ? JSON.stringify(value) : String(value);
     }
   }
+
+  function processObject(obj, prefix = '') {
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'object' && value !== null) {
+        if (Array.isArray(value)) {
+          lines.push(`${fullKey} = ${JSON.stringify(value)}`);
+        } else {
+          // 嵌套对象，继续递归
+          processObject(value, fullKey);
+        }
+      } else {
+        lines.push(`${fullKey} = ${stringifyValue(value)}`);
+      }
+    }
+  }
+
+  processObject(cfg);
   return lines.join('\n');
 }
 
@@ -593,7 +616,7 @@ function tomlString(cfg) {
  * 非交互模式（--non-interactive）使用默认配置
  */
 async function doConfigWizard() {
-  const isTTY = process.stdin.isTTY;
+  const isTTY = process.stdin.isTTY === true;
 
   if (!isTTY) {
     log('info', '非交互模式：使用默认配置');
@@ -769,7 +792,8 @@ extensions = ["data/extensions/wiedza.md"]
 #tbs = "qdr:w"            # 时间范围，默认过去一周
 #query = ""               # 可选，默认使用文章标题
 `, 'utf-8');
-    log('info', '示例配置文件已创建于', CFG);
+      log('info', '示例配置文件已创建于', CFG);
+    }
     return;
   }
 
@@ -855,7 +879,6 @@ extensions = ["data/extensions/wiedza.md"]
           finalContent = finalContent.replace(new RegExp(oldUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), () => newUrl);
         }
       }
-    }
     }
 
     log('info', '正在发布...');
