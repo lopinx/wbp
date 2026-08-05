@@ -12,7 +12,7 @@
     "pick": "node skills/wbp/scripts/wbp.mjs pick",
     "publish": "node skills/wbp/scripts/wbp.mjs publish",
     "init": "node skills/wbp/scripts/wbp.mjs init",
-    "install": "node skills/wbp/scripts/install.mjs"
+    "wbp:install": "node skills/wbp/scripts/wbp.mjs install"
   },
   "keywords": [
     "wordpress",
