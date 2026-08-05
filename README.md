@@ -37,14 +37,41 @@ cd wbp/skills/wbp/scripts       # package.json 所在目录
 npm install
 npm link                         # 注册全局 `wbp` 命令
 wbp install                      # 全局化 + 自动检测 AI CLI 并创建命令文件
-wbp init                         # 生成配置模板
+wbp init                         # 生成配置模板（交互式配置向导）
 ```
 
 `npm link` 把仓库的 `wbp.mjs` 注册为系统全局命令，处处可用。**升级只需 `git pull`，无需重新安装**——全局链接始终指向仓库最新代码。
 
-安装脚本自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw），仅为已安装的工具创建命令文件；命令文件里用的是 `wbp` 全局命令，不再写死绝对路径。
+安装脚本会自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw），仅为已安装的工具创建命令文件；命令文件里用的是 `wbp` 全局命令，不再写死绝对路径。
 
-> `npm link` 失败时（如无全局目录写权限），安装脚本自动回退到本地复制模式，AI 命令改用绝对路径调用。
+> `npm link` 失败时（如无全局目录写权限），安装脚本会自动回退到本地复制模式，AI 命令改用绝对路径调用。
+
+### 交互式配置向导
+
+首次使用时，运行 `wbp install` 会自动启动交互式配置向导，引导你完成以下配置：
+
+1. 站点名称
+2. WordPress URL（REST API 端点）
+3. 用户名
+4. 应用程序密码
+5. 分类（支持 ID 或名称，如 `1,2,news,vape`）
+6. 关键词文件路径
+7. 产品数据文件路径
+8. 提示词文件路径
+9. 行业知识扩展文件路径
+10. 图片处理模式（S3/图片搜索/CDN/媒体库）
+
+配置完成后，会自动生成 `~/.wbp/setting.toml` 文件。
+
+### 非交互式模式
+
+对于自动化部署场景，可以使用 `--non-interactive` 标志跳过交互式向导，直接使用默认配置：
+
+```bash
+wbp install --non-interactive
+```
+
+这将生成一个包含默认配置的 TOML 文件，无需用户输入。
 
 ### 方式二：npx 直接运行（无需 clone 仓库）
 
@@ -73,6 +100,7 @@ npx github:lopinx/wbp init
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `wbp init` | 创建配置模板 | `wbp init` |
+| `wbp install` | 安装 + 配置向导（交互式或非交互式） | `wbp install` 或 `wbp install --non-interactive` |
 | `wbp pick` | 随机选取关键词 | `wbp pick` |
 | `wbp publish <draft.json>` | 发布草稿 | `wbp publish ~/.wbp/_draft.json` |
 

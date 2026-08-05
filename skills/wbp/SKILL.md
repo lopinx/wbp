@@ -21,6 +21,18 @@ argument-hint: "<任务描述> [数量]"
 
 ## Workflow
 
+### 0. 安装和配置（首次使用）
+```bash
+wbp install              # 交互式配置向导
+# 或
+wbp install --non-interactive  # 非交互式模式，使用默认配置
+```
+
+安装脚本会自动：
+- 全局化 npm link（`npm link`）
+- 检测本地 AI CLI 并创建命令文件
+- 启动交互式配置向导（10 个问题）或生成默认配置
+
 ### 1. 选取关键词
 ```bash
 wbp pick
