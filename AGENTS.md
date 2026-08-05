@@ -1,17 +1,17 @@
-<!-- Generated: 2026-08-01 | Updated: 2026-08-05 -->
+<!-- Generated: 2026-08-01 | Updated: 2026-08-06 -->
 
 # wordpress-skills
 
 ## 用途
-跨平台 WordPress 发布 CLI 工具 (wbp.mjs)，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具 (wbp.mjs)，兼容 10 种 AI 工具（Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
 
 ## 关键文件
 
 | 文件 | 说明 |
 |------|------|
-| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、交互式配置向导、tomlString、parseCategories。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 + 配置向导 |
+| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、交互式配置向导、tomlString、parseCategories。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 + 配置向导（两步骤：选择 AI 工具 + 配置 WordPress） |
 | `selftest.mjs` | 108 项自动化测试，覆盖语法、init、pick、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证、配置向导、tomlString、parseCategories |
-| `package.json` | Node.js 项目清单，依赖 exceljs 库 |
+| `package.json` | Node.js 项目清单，依赖 exceljs 库；`scripts` 不含 `install`（npm 保留 lifecycle hook，改用 `wbp:install`） |
 | `CLAUDE.md` | Claude Code 项目记忆，含提交规范 |
 | `README.md` | 完整用户文档 |
 

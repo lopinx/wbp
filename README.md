@@ -9,16 +9,22 @@
 
 ## 项目简介
 
-**wbp** (WordPress Publisher) 是一个单文件 Node.js CLI 工具，专为 AI 辅助内容发布设计。兼容 6 种 AI 工具：
+**wbp** (WordPress Publisher) 是一个单文件 Node.js CLI 工具，专为 AI 辅助内容发布设计。兼容 10 种 AI 工具：
 
 | AI 工具 | 调用方式 | 命令文件位置 |
 |---------|----------|-------------|
-| **Claude Code** | `/wbp` | `~/.claude/commands/wbp.md` |
-| **OpenAI Codex** | `@wbp` | `~/.codex/prompts/wbp.md` |
-| **OpenCode** | `/wbp` | `~/.config/opencode/commands/wbp.md` |
-| **Hermes** | `/wbp` | `~/.hermes/commands/wbp.md` |
-| **OpenClaw** | `/wbp` | `~/.openclaw/commands/wbp.md` |
-| **小U同学** | `/wbp` | `~/.uos-ai/skills/wbp/wbp.md` |
+| **Claude Code** | `/wbp` | `~/.claude/skills/wbp.skill.md` |
+| **Hermes** | `/wbp` | `~/.hermes/skills/wbp.skill.md` |
+| **OpenAI Codex** | `@wbp` | `~/.codex/skills/wbp.skill.md` |
+| **Gemini CLI** | `/wbp` | `~/.gemini/skills/wbp.skill.md` |
+| **Antigravity CLI** | `/wbp` | `~/.antigravity/skills/wbp.skill.md` |
+| **OpenClaw** | `/wbp` | `~/.openclaw/skills/wbp.skill.md` |
+| **Cursor** | `/wbp` | `~/.cursor/skills/wbp.skill.md` |
+| **GitHub Copilot** | `/wbp` | `~/.github/skills/wbp.skill.md` |
+| **OpenCode** | `/wbp` | `~/.config/opencode/skills/wbp.skill.md` |
+| **小U同学** | `/wbp` | `~/.uos-ai/skills/wbp.skill.md` |
+
+> **Agent Skills 开放标准**：Codex、Gemini CLI、Antigravity CLI、OpenClaw、UOS AI、Cursor、GitHub Copilot、OpenCode 支持通用标准目录 `~/.agents/skills/`；Claude Code 使用 `~/.claude/skills/`；Hermes 使用 `~/.hermes/skills/`。
 
 ### 核心工作流
 
@@ -43,13 +49,25 @@ wbp init                         # 生成配置模板（交互式配置向导）
 
 `npm link` 把仓库的 `wbp.mjs` 注册为系统全局命令，处处可用。**升级只需 `git pull`，无需重新安装**——全局链接始终指向仓库最新代码。
 
-安装脚本会自动检测本地已安装的 AI CLI（Claude Code、Codex、OpenCode、Hermes、OpenClaw），仅为已安装的工具创建命令文件；命令文件里用的是 `wbp` 全局命令，不再写死绝对路径。
+安装脚本会自动检测本地已安装的 AI CLI，交互式选择为哪些工具创建命令文件；命令文件里用的是 `wbp` 全局命令，不再写死绝对路径。
 
 > `npm link` 失败时（如无全局目录写权限），安装脚本会自动回退到本地复制模式，AI 命令改用绝对路径调用。
 
-### 交互式配置向导
+### 交互式安装向导
 
-首次使用时，运行 `wbp install` 会自动启动交互式配置向导，引导你完成以下配置：
+首次使用时，运行 `wbp install` 会启动两个交互式步骤：
+
+#### 步骤 1：选择要安装的 AI 工具
+
+安装脚本会检测本地已安装的 AI CLI，并显示可安装工具列表（支持 10 种：Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学）。你可以：
+
+- 输入数字选择单个工具（如 `1`）
+- 输入多个数字选择多个工具（如 `1,2`）
+- 输入 `all` 安装所有检测到的工具
+
+#### 步骤 2：配置 WordPress
+
+选择工具后，安装脚本会自动创建命令文件，然后启动 WordPress 配置向导，引导你完成以下配置：
 
 1. 站点名称
 2. WordPress URL（REST API 端点）
@@ -77,7 +95,7 @@ wbp install --non-interactive
 ### 方式二：npx 直接运行（无需 clone 仓库）
 
 ```bash
-# 一键安装到 ~/.wbp 并创建 AI 命令
+# 一键安装到 ~/.wbp 并创建 AI 命令（交互式安装 + 配置向导）
 npx github:lopinx/wbp install
 
 # 或分步执行
@@ -86,15 +104,7 @@ npx github:lopinx/wbp pick     # 选取关键词
 npx github:lopinx/wbp publish ~/.wbp/_draft.json  # 发布文章
 ```
 
-> `npx github:lopinx/wbp` 会自动从 GitHub 拉取最新代码并在临时目录运行，安装脚本会在检测到的 AI 工具（Claude Code、Codex 等）中创建调用命令。
-
-### npx 直接运行（无需安装）
-
-```bash
-npx github:lopinx/wbp pick
-npx github:lopinx/wbp publish ~/.wbp/_draft.json
-npx github:lopinx/wbp init
-```
+> `npx github:lopinx/wbp` 会自动从 GitHub 拉取最新代码并在临时目录运行，安装脚本会在检测到的 AI 工具中创建调用命令。
 
 ## CLI 使用
 
@@ -110,10 +120,11 @@ npx github:lopinx/wbp init
 ### npm scripts（仓库内）
 
 ```bash
-npm start        # node wbp.mjs
-npm run init     # node wbp.mjs init
-npm run pick     # node wbp.mjs pick
-npm run test     # 自检测试
+npm start              # node wbp.mjs
+npm run init           # node wbp.mjs init
+npm run pick           # node wbp.mjs pick
+npm run wbp:install    # node wbp.mjs install（安装 + 配置向导）
+npm run test           # 自检测试
 ```
 
 ### 草稿 JSON 格式
