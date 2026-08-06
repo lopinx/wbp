@@ -13,16 +13,16 @@
 
 | AI 工具 | 调用方式 | 命令文件位置 |
 |---------|----------|-------------|
-| **Claude Code** | `/wbp` | `~/.claude/skills/wbp.skill.md` |
-| **Hermes** | `/wbp` | `~/.hermes/skills/wbp.skill.md` |
-| **OpenAI Codex** | `@wbp` | `~/.codex/skills/wbp.skill.md` |
-| **Gemini CLI** | `/wbp` | `~/.gemini/skills/wbp.skill.md` |
-| **Antigravity CLI** | `/wbp` | `~/.antigravity/skills/wbp.skill.md` |
-| **OpenClaw** | `/wbp` | `~/.openclaw/skills/wbp.skill.md` |
-| **Cursor** | `/wbp` | `~/.cursor/skills/wbp.skill.md` |
-| **GitHub Copilot** | `/wbp` | `~/.github/skills/wbp.skill.md` |
-| **OpenCode** | `/wbp` | `~/.config/opencode/skills/wbp.skill.md` |
-| **小U同学** | `/wbp` | `~/.uos-ai/skills/wbp.skill.md` |
+| **Claude Code** | `/wbp` | `~/.claude/skills/wbp/SKILL.md` |
+| **Hermes** | `/wbp` | `~/.hermes/skills/wbp/SKILL.md` |
+| **OpenAI Codex** | `@wbp` | `~/.codex/skills/wbp/SKILL.md` |
+| **Gemini CLI** | `/wbp` | `~/.gemini/skills/wbp/SKILL.md` |
+| **Antigravity CLI** | `/wbp` | `~/.antigravity/skills/wbp/SKILL.md` |
+| **OpenClaw** | `/wbp` | `~/.openclaw/skills/wbp/SKILL.md` |
+| **Cursor** | `/wbp` | `~/.cursor/skills/wbp/SKILL.md` |
+| **GitHub Copilot** | `/wbp` | `~/.github/skills/wbp/SKILL.md` |
+| **OpenCode** | `/wbp` | `~/.config/opencode/skills/wbp/SKILL.md` |
+| **小U同学** | `/wbp` | `~/.uos-ai/skills/wbp/SKILL.md` |
 
 > **Agent Skills 开放标准**：Codex、Gemini CLI、Antigravity CLI、OpenClaw、UOS AI、Cursor、GitHub Copilot、OpenCode 支持通用标准目录 `~/.agents/skills/`；Claude Code 使用 `~/.claude/skills/`；Hermes 使用 `~/.hermes/skills/`。
 
@@ -273,11 +273,11 @@ zip -r wbp-skill.zip skills/wbp/SKILL.md README.md AGENTS.md CLAUDE.md skills/wb
 
 | AI 工具 | 导入位置 | 调用方式 |
 |---------|----------|----------|
-| **Claude Code** | `~/.claude/skills/wbp.skill.md` | `/wbp` |
-| **OpenAI Codex** | `~/.codex/skills/wbp.skill.md` | `@wbp` |
-| **OpenCode** | `~/.config/opencode/skills/wbp.skill.md` | `/wbp` |
-| **Hermes** | `~/.hermes/skills/wbp.skill.md` | `/wbp` |
-| **OpenClaw** | `~/.openclaw/skills/wbp.skill.md` | `/wbp` |
+| **Claude Code** | `~/.claude/skills/wbp/SKILL.md` | `/wbp` |
+| **OpenAI Codex** | `~/.codex/skills/wbp/SKILL.md` | `@wbp` |
+| **OpenCode** | `~/.config/opencode/skills/wbp/SKILL.md` | `/wbp` |
+| **Hermes** | `~/.hermes/skills/wbp/SKILL.md` | `/wbp` |
+| **OpenClaw** | `~/.openclaw/skills/wbp/SKILL.md` | `/wbp` |
 
 也可以使用 `wbp install` 命令自动检测并安装到这些工具。
 

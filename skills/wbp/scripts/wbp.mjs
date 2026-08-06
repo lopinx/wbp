@@ -594,7 +594,7 @@ function generatePromptContent(tool) {
   return `# WordPress Publisher Skill
 
 ## Purpose
-跨平台 WordPress 发布 CLI 工具，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具，兼容 10 种 AI 工具（Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
 
 ## When to Activate
 - 用户说 "发布文章"、"写博客"、"publish"、"wordpress"
@@ -713,7 +713,7 @@ wbp publish ~/.wbp/_draft.json
  */
 function createCommandFile(tool, content) {
   const { slug, dir, invoke } = tool;
-  const filePath = join(homedir(), ...dir, 'wbp.skill.md');
+  const filePath = join(homedir(), ...dir, 'wbp', 'SKILL.md');
 
   // 确保目录存在
   try {
@@ -792,7 +792,11 @@ async function selectTools(tools) {
  */
 function parseCategories(categoriesStr) {
   if (!categoriesStr || !categoriesStr.trim()) return [];
-  return categoriesStr.split(',').map(c => c.trim()).filter(c => c);
+  return categoriesStr.split(',').map(c => c.trim()).filter(c => c).map(c => {
+    // 纯数字转为 number，否则保留字符串
+    const n = Number(c);
+    return c !== '' && !isNaN(n) && /^-?\d+$/.test(c) ? n : c;
+  });
 }
 
 /**
@@ -901,70 +905,81 @@ async function doConfigWizard(nonInteractive = false) {
     output: process.stdout
   }));
 
+  // 站点点名必须为合法 TOML 标识符（字母数字下划线，且不以数字开头）
+  const isValidSlug = v => /^[A-Za-z_][A-Za-z0-9_]*$/.test(v);
+
   const questions = [
     {
-      key: 'site.name',
+      key: 'slug',
+      question: '站点点名（TOML section key，字母/数字/下划线，不以数字开头）',
+      default: 'myblog',
+      validator: v => isValidSlug(v) || '站点点名只能包含字母、数字、下划线，且不能以数字开头'
+    },
+    {
+      key: 'name',
       question: '站点名称',
       default: 'My Blog',
       validator: v => v.trim().length > 0 || '站点名称不能为空'
     },
     {
-      key: 'site.url',
+      key: 'url',
       question: 'WP REST API 地址（如 https://example.com/wp-json/wp/v2）',
       default: 'https://example.com/wp-json/wp/v2',
       validator: v => /^https?:\/\/.+\/wp-json\/wp\/v2$/.test(v) || 'URL 格式不正确'
     },
     {
-      key: 'site.user',
+      key: 'user',
       question: 'WordPress 用户名',
       default: 'admin',
       validator: v => v.trim().length > 0 || '用户名不能为空'
     },
     {
-      key: 'site.pass',
+      key: 'pass',
       question: 'WP Application Password',
       default: 'abcd efgh ijkl mnop',
       validator: v => v.trim().length >= 10 || '密码长度至少 10 个字符'
     },
     {
-      key: 'site.categories',
+      key: 'categories',
       question: '分类（用逗号分隔，可填数字 ID 或名称）',
       default: '1,2,3',
       validator: v => parseCategories(v).length > 0 || '至少需要一个分类'
     },
     {
-      key: 'site.keywords',
-      question: '关键词文件路径（相对 ~/.wbp 或绝对路径）',
+      key: 'keywords',
+      question: '关键词文件路径（多个用逗号分隔，相对 ~/.wbp 或绝对路径）',
       default: 'data/keywords.xlsx',
-      validator: v => v.trim().length > 0 || '关键词文件路径不能为空'
+      validator: v => v.trim().length > 0 || '关键词文件路径不能为空',
+      transform: v => v.split(',').map(s => s.trim()).filter(Boolean)
     },
     {
-      key: 'site.products',
+      key: 'products',
       question: '产品文件路径（相对 ~/.wbp 或绝对路径）',
       default: 'data/products.xlsx',
       validator: v => v.trim().length > 0 || '产品文件路径不能为空'
     },
     {
-      key: 'site.prompts',
+      key: 'prompts',
       question: '提示文件路径（相对 ~/.wbp 或绝对路径）',
       default: 'data/prompts.md',
       validator: v => v.trim().length > 0 || '提示文件路径不能为空'
     },
     {
-      key: 'site.extensions',
+      key: 'extensions',
       question: '扩展文件路径（多个用逗号分隔，相对 ~/.wbp 或绝对路径）',
       default: 'data/extensions/wiedza.md',
-      validator: v => parseCategories(v).length > 0 || '至少需要一个扩展文件'
+      validator: v => v.trim().length > 0 || '扩展文件路径不能为空',
+      transform: v => v.split(',').map(s => s.trim()).filter(Boolean)
     },
     {
-      key: 'site.cdn',
+      key: 'cdn.mode',
       question: '图片模式（s3/search/cdn/不配置）',
       default: 's3',
       validator: v => ['s3', 'search', 'cdn'].includes(v.toLowerCase()) || '模式必须是 s3/search/cdn'
     }
   ];
 
-  const config = {};
+  const answers = {};
 
   for (const q of questions) {
     const value = await new Promise(resolve => {
@@ -973,10 +988,10 @@ async function doConfigWizard(nonInteractive = false) {
       });
     });
 
-    // 验证
+    // 验证：validator 返回 true 表示通过，返回字符串表示错误信息
     const error = q.validator(value);
-    if (error) {
-      log('error', error);
+    if (error !== true) {
+      log('error', String(error));
       try {
         readline.close();
       } catch (e) {
@@ -985,8 +1000,26 @@ async function doConfigWizard(nonInteractive = false) {
       process.exit(1);
     }
 
-    config[q.key] = value;
+    answers[q.key] = q.transform ? q.transform(value) : value;
   }
+
+  // 构建嵌套配置结构：site.<slug>.{field...}，匹配 pick/publish 期望
+  const config = {
+    site: {
+      [answers.slug]: {
+        name: answers.name,
+        url: answers.url,
+        user: answers.user,
+        pass: answers.pass,
+        categories: parseCategories(answers.categories),
+        keywords: answers.keywords,
+        products: answers.products,
+        prompts: answers.prompts,
+        extensions: answers.extensions,
+        cdn: { mode: answers['cdn.mode'] }
+      }
+    }
+  };
 
   // 写入配置文件
   const toml = tomlString(config);
@@ -1007,49 +1040,8 @@ async function main() {
   }
 
   if (cmd === 'init') {
-    if (nonInteractive) {
-      await doConfigWizard();
-    } else {
-      // 交互式创建示例配置
-      writeFileSync(CFG, `# ~/.wbp/setting.toml
-[site.myblog]
-name = "BuchMistrz"
-url = "https://www.buchmistrz.com/wp-json/wp/v2"
-user = "admin"
-pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
-categories = [1, "news", "vape"]  # 支持数字ID或名称，多个分类
-keywords = ["data/keywords.xlsx", "data/keywords2.xlsx"]  # 可多个
-products = "data/products.xlsx"
-prompts = "data/prompts.md"
-extensions = ["data/extensions/wiedza.md"]
-
-# 四种图片模式（选其一）：
-# 1) S3 兼容 — mode="s3" 拉图池混排，endpoint 可选
-# 2) 图片搜索 — mode="search" 通过 Serper.dev 等 API 搜索图片
-# 3) CDN — mode="cdn" 远程URL原样保留
-# 4) 不配 cdn 节点 → 自动上传到媒体库
-#[site.myblog.cdn]
-#mode = "s3"
-#bucket = "my-bucket"
-#region = "us-east-1"
-#key = "AKIA..."
-#secret = "..."
-#prefix = "images/"
-# endpoint 可选，不填则自动使用 AWS S3 地址
-# 支持：Cloudflare R2 / Amazon S3 / Kodo / MinIO / Ceph / 任意 S3 兼容存储
-#endpoint = "https://s3.us-east-1.qiniucs.com"
-#domain = "cdn.example.com"
-#
-# 图片搜索 API（配合 cdn.mode="search" 使用）
-#[site.myblog.images]
-#keys = ["your-serper-dev-api-key-1", "your-serper-dev-api-key-2"]  # 随机轮询
-#gl = "pl"                # 国家代码，默认 pl（波兰）
-#hl = "pl"                # 语言代码，默认 pl
-#tbs = "qdr:w"            # 时间范围，默认过去一周
-#query = ""               # 可选，默认使用文章标题
-`, 'utf-8');
-      log('info', '示例配置文件已创建于', CFG);
-    }
+    // init 命令复用 install 的配置向导（--non-interactive 用默认配置）
+    await doConfigWizard(nonInteractive);
     return;
   }
 
