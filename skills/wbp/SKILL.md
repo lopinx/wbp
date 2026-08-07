@@ -13,7 +13,7 @@ argument-hint: "<任务描述> [数量]"
 # WordPress Publisher Skill
 
 ## Purpose
-跨平台 WordPress 发布 CLI 工具，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 CSV/TXT 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
 
 ## When to Activate
 - 用户说 "发布文章"、"写博客"、"publish"、"wordpress"
@@ -38,7 +38,7 @@ wbp install --non-interactive  # 非交互式模式，使用默认配置
 wbp pick
 ```
 输出 JSON 包含：`site`、`keyword`、`keywordRow`、`products`、`prompts`、`extensions`、`images`
-（未全局化时改用 `node ~/.wbp/wbp.mjs pick`）
+（未全局化时改用 `node <仓库>/skills/wbp/scripts/wbp.mjs pick`）
 
 ### 2. 撰写文章
 基于关键词、产品数据、写作提示词和扩展知识，撰写文章草稿。
@@ -104,6 +104,12 @@ wbp publish ~/.wbp/_draft.json
 | 图片搜索 | `mode = "search"` | 通过 Serper.dev 等 API 搜索图片（多 key 随机轮询），混排插入段落间 |
 | CDN | `mode = "cdn"` | 保留内容中的远程图片 URL 不变 |
 | 媒体库 | 无 cdn 配置 | 下载外部图片上传到 WP 媒体库，替换 URL |
+
+## 数据文件格式
+- **关键词文件**（`keywords.csv`）：CSV 格式，UTF-8 with BOM，首行表头 `keyword`，后续每行一个关键词
+- **产品文件**（`products.csv`）：CSV 格式，UTF-8 with BOM，首行表头 `name,price,desc`
+- 也支持 `.txt` 格式：首行表头含制表符则按 `\t` 分列，含 `;` 则按 `;` 分列，否则整行为单列
+- 不支持 `.xlsx`：请用 Excel「另存为 CSV」转换
 
 ## 多站点支持
 在 `setting.toml` 中配置多个 `[site.xxx]` 节点，`pick` 时随机选择一个站点。
