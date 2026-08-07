@@ -173,22 +173,47 @@ function parseToml(t) {
   return r;
 }
 
-// ── Excel 读取器 ──
-async function readExcel(p) {
-  if (!existsSync(p)) throw new Error('文件未找到');
-  const { default: ExcelJS } = await import('exceljs');
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(p);
-  const ws = wb.getWorksheet(1);
-  const data = [];
-  ws.eachRow((row, rowNumber) => {
-    if (rowNumber > 1) { // 跳过表头
-      const rowValues = row.values;
-      rowValues.shift(); // 移除空值
-      data.push(rowValues);
+// ── 数据表读取器（csv/txt，零依赖）──
+function parseCSV(content) {
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1); // 去 UTF-8 BOM
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < content.length; i++) {
+    const c = content[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (content[i + 1] === '"') { field += '"'; i++; }      // "" 转义为 "
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* 容忍 \r\n，等 \n 触发换行 */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
     }
-  });
-  return data;
+  }
+  // 末行无换行符收尾
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(v => v.trim() !== '')).slice(1); // 过滤空行 + 跳表头
+}
+
+function parseTXT(content) {
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim() !== '');
+  if (lines.length <= 1) return []; // 仅表头或空
+  const header = lines[0];
+  const sep = header.includes('\t') ? '\t' : (header.includes(';') ? ';' : null);
+  return lines.slice(1).map(l => sep ? l.split(sep) : [l]);
+}
+
+async function readTable(p) {
+  if (!existsSync(p)) throw new Error('文件未找到: ' + p);
+  const ext = p.toLowerCase().slice(p.lastIndexOf('.'));
+  const content = readFileSync(p, 'utf-8');
+  if (ext === '.csv') return parseCSV(content);
+  if (ext === '.txt') return parseTXT(content);
+  throw new Error('不支持的数据格式 ' + ext + '，请另存为 CSV 或 TXT: ' + p);
 }
 
 // ── 图片搜索（Serper.dev / 兼容 API）──
@@ -1059,12 +1084,12 @@ async function main() {
 
   if (cmd === 'pick') {
     if (!kwPaths.length || !kwPaths.some(existsSync)) { die(`未找到关键词文件: ${kwPaths.join(', ')}`); }
-    const keywords = (await Promise.all(kwPaths.filter(existsSync).map(readExcel))).flat();
+    const keywords = (await Promise.all(kwPaths.filter(existsSync).map(readTable))).flat();
     if (!keywords.length) { die('关键词文件为空'); }
     const kw = keywords[Math.floor(Math.random() * keywords.length)], kwKeys = Object.keys(keywords[0]);
     const keyword = kw[kwKeys[0]] || kw.keyword || kw.name || '';
     let products = [];
-    if (prodPath && existsSync(prodPath)) products = await readExcel(prodPath);
+    if (prodPath && existsSync(prodPath)) products = await readTable(prodPath);
     let promptDoc = '';
     if (promptPath && existsSync(promptPath)) promptDoc = readFileSync(promptPath, 'utf-8').slice(0, 3000);
     let extDocs = '';
