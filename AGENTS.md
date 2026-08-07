@@ -3,15 +3,15 @@
 # wordpress-skills
 
 ## 用途
-跨平台 WordPress 发布 CLI 工具 (wbp.mjs)，兼容 10 种 AI 工具（Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学）。单命令工作流：从 Excel 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具 (wbp.mjs)，兼容 10 种 AI 工具（Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学）。单命令工作流：从 CSV/TXT 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
 
 ## 关键文件
 
 | 文件 | 说明 |
 |------|------|
-| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、Excel 读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、交互式配置向导、tomlString、parseCategories。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 + 配置向导（两步骤：选择 AI 工具 + 配置 WordPress） |
-| `selftest.mjs` | 108 项自动化测试，覆盖语法、init、pick、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证、配置向导、tomlString、parseCategories |
-| `package.json` | Node.js 项目清单，依赖 exceljs 库；`scripts` 不含 `install`（npm 保留 lifecycle hook，改用 `wbp:install`） |
+| `wbp.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、CSV/TXT 读取（parseCSV/parseTXT）、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、交互式配置向导、tomlString、parseCategories。`wbp install` 子命令负责 npm link 全局化 + AI CLI 检测 + 命令文件生成 + 配置向导（两步骤：选择 AI 工具 + 配置 WordPress） |
+| `selftest.mjs` | 自动化测试，覆盖语法、init、pick、TOML 解析（含边界情况）、去重哈希、图片混排、图片函数、WP API 函数、错误处理、文档验证、配置向导、tomlString、parseCategories、CSV/TXT 解析 |
+| `package.json` | Node.js 项目清单，零运行时依赖；`scripts` 不含 `install`（npm 保留 lifecycle hook，改用 `wbp:install`） |
 | `CLAUDE.md` | Claude Code 项目记忆，含提交规范 |
 | `README.md` | 完整用户文档 |
 
@@ -25,7 +25,7 @@
 ## 给 AI 代理的指引
 
 ### 在此目录工作
-- **单文件架构**：所有逻辑集中在 `wbp.mjs`，不拆分内部模块（仅标准库/依赖的 import）
+- **单文件架构**：所有逻辑集中在 `wbp.mjs`，不拆分内部模块（仅 Node 标准库 import，零运行时依赖）
 - **仅 ES 模块**：使用 `import`/`export`，通过 `node wbp.mjs` 直接运行
 - **跨平台路径**：使用 `path.join` 和 `os.homedir()` 兼容 Windows/Unix
 - **无构建步骤**：直接执行，无需转译
@@ -50,12 +50,9 @@
 ## 依赖关系
 
 ### 内部
-- `data/keywords.xlsx` - 关键词池，随机选取主题
-- `data/products.xlsx` - 产品数据，用于内容丰富
+- `data/keywords.csv` - 关键词池，随机选取主题
+- `data/products.csv` - 产品数据，用于内容丰富
 - `data/prompts.md` - 写作指令（波兰语）
 - `data/extensions/` - 扩展知识文件（wiedza.md）
 
-### 外部
-- `exceljs` (npm) - Excel 文件读取，通过 eachRow
-
-<!-- MANUAL: 核心工具是 wbp.mjs，其他文件均为辅助工具。设计目标为单命令跨 5 个 AI 平台运行。 -->
+<!-- MANUAL: 核心工具是 wbp.mjs，其他文件均为辅助工具。设计目标为单命令跨 10 个 AI 平台运行，零运行时依赖。 -->

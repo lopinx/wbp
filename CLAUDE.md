@@ -20,11 +20,11 @@
 
 | 文件 | 说明 |
 |------|------|
-| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、Excel 读取、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试、配置向导。`wbp install` 子命令负责 npm link 全局化 + 自动检测 AI CLI 创建命令文件 + 交互式配置向导（两步骤：选择 AI 工具 + 配置 WordPress） |
-| `skills/wbp/scripts/__TEST__/selftest.mjs` | 108 项自动化测试（93% 覆盖率） |
-| `skills/wbp/scripts/package.json` | ESM 模块，依赖 exceljs；`scripts` 不含 `install`（npm 保留 lifecycle hook，改用 `wbp:install`） |
+| `skills/wbp/scripts/wbp.mjs` | 核心单文件 ES 模块：TOML 解析、CSV/TXT 读取（parseCSV/parseTXT）、S3 SigV4、WP REST API、图片混排、质量检查、去重、重试、配置向导。`wbp install` 子命令负责 npm link 全局化 + 自动检测 AI CLI 创建命令文件 + 交互式配置向导（两步骤：选择 AI 工具 + 配置 WordPress） |
+| `skills/wbp/scripts/__TEST__/selftest.mjs` | 自动化测试（CSV/TXT 解析、init、pick、TOML、去重、图片、WP API、错误处理、配置向导等） |
+| `skills/wbp/scripts/package.json` | ESM 模块，零运行时依赖；`scripts` 不含 `install`（npm 保留 lifecycle hook，改用 `wbp:install`） |
 | `skills/wbp/SKILL.md` | 技能定义文档 |
-| `skills/wbp/references/data/` | 配置数据目录（keywords.xlsx、products.xlsx、prompts.md） |
+| `skills/wbp/references/data/` | 配置数据目录（keywords.csv、products.csv、prompts.md） |
 | `skills/wbp/references/data/extensions/` | 行业知识扩展文件 |
 | `README.md` | 完整文档 |
 | `CLAUDE.md` | Claude Code 项目记忆 |
@@ -53,7 +53,7 @@
 
 ## 代码约定
 
-- 单文件架构，所有逻辑在 `wbp.mjs` 中
+- 单文件架构，所有逻辑在 `wbp.mjs` 中（仅 Node 标准库，零运行时依赖）
 - 仅 ES 模块（`import`/`export`）
 - 跨平台路径（`path.join` + `os.homedir()`）
 - 无构建步骤，直接运行

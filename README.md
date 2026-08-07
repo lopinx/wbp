@@ -41,8 +41,7 @@
 ```bash
 git clone https://github.com/lopinx/wbp.git
 cd wbp/skills/wbp/scripts       # package.json 所在目录
-npm install
-npm link                         # 注册全局 `wbp` 命令
+npm link                         # 注册全局 `wbp` 命令（零运行时依赖，无需 npm install）
 wbp install                      # 全局化 + 自动检测 AI CLI 并创建命令文件
 wbp init                         # 生成配置模板（交互式配置向导）
 ```
@@ -149,8 +148,8 @@ url = "https://example.com/wp-json/wp/v2"
 user = "admin"
 pass = "xxxx xxxx xxxx xxxx"
 categories = [1, "news", "vape"]          # 多分类支持（ID 或名称）
-keywords = ["data/keywords.xlsx"]
-products = "data/products.xlsx"
+keywords = ["data/keywords.csv"]
+products = "data/products.csv"
 prompts = "data/prompts.md"
 extensions = ["data/extensions/wiedza.md"]
 
@@ -181,13 +180,13 @@ tbs = "qdr:w"            # 时间范围，默认过去一周
 [site.blog1]
 name = "Blog 1"
 url = "https://blog1.com/wp-json/wp/v2"
-keywords = ["data/blog1-keywords.xlsx"]
+keywords = ["data/blog1-keywords.csv"]
 # ...
 
 [site.blog2]
 name = "Blog 2"
 url = "https://blog2.com/wp-json/wp/v2"
-keywords = ["data/blog2-keywords.xlsx"]
+keywords = ["data/blog2-keywords.csv"]
 # ...
 ```
 
@@ -239,8 +238,8 @@ wordpress-skills/
 │   │       └── selftest.mjs # 自检测试
 │   └── references/
 │       └── data/
-│           ├── keywords.xlsx    # 关键词池
-│           ├── products.xlsx    # 产品数据
+│           ├── keywords.csv     # 关键词池
+│           ├── products.csv     # 产品数据
 │           ├── prompts.md       # 写作指令
 │           └── extensions/
 │               └── wiedza.md    # 行业知识
