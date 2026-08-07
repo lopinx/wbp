@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // selftest.mjs — wbp.mjs 自检（增强版）
-import { existsSync, readFileSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
@@ -103,7 +103,7 @@ function syncRefData() {
   }
 }
 syncRefData();
-ok(existsSync(join(WP_DIR, 'data', 'keywords.xlsx')), '测试数据已就位');
+ok(existsSync(join(WP_DIR, 'data', 'keywords.csv')), '测试数据已就位');
 
 // ── 3. 选择关键词 ──
 console.log('\n## 3. 选择关键词');
@@ -275,10 +275,85 @@ ok(existsSync(join(SCRIPT_DIR, '../../../AGENTS.md')), 'AGENTS.md 存在');
 
 // ── 13. 数据文件 ──
 console.log('\n## 13. 数据文件');
-ok(existsSync(join(SCRIPT_DIR, '../references/data', 'keywords.xlsx')), 'keywords.xlsx 存在');
-ok(existsSync(join(SCRIPT_DIR, '../references/data', 'products.xlsx')), 'products.xlsx 存在');
+ok(existsSync(join(SCRIPT_DIR, '../references/data', 'keywords.csv')), 'keywords.csv 存在');
+ok(existsSync(join(SCRIPT_DIR, '../references/data', 'products.csv')), 'products.csv 存在');
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'prompts.md')), 'prompts.md 存在');
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'extensions', 'wiedza.md')), 'wiedza.md 存在');
+
+// ── 13.1 CSV/TXT 解析单元测试 ──
+console.log('\n## 13.1 CSV/TXT 解析测试');
+function parseCSV(content) {
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  const rows = []; let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < content.length; i++) {
+    const c = content[i];
+    if (inQuotes) {
+      if (c === '"') { if (content[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') {}
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(v => v.trim() !== '')).slice(1);
+}
+function parseTXT(content) {
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim() !== '');
+  if (lines.length <= 1) return [];
+  const header = lines[0];
+  const sep = header.includes('\t') ? '\t' : (header.includes(';') ? ';' : null);
+  return lines.slice(1).map(l => sep ? l.split(sep) : [l]);
+}
+const _td = mkdtempSync(join(tmpdir(), 'wbp-csv-test-'));
+
+// CSV: 基本逗号分隔
+writeFileSync(join(_td, 'a.csv'), 'keyword\nfoo\nbar\nbaz\n', 'utf-8');
+const _a = parseCSV(readFileSync(join(_td, 'a.csv'), 'utf-8'));
+ok(_a.length === 3, 'CSV 基本解析 3 行');
+ok(_a[0][0] === 'foo', 'CSV 首行首列为 foo');
+
+// CSV: 引号包裹含逗号
+writeFileSync(join(_td, 'b.csv'), 'name,desc\n"a,b","hello"\n', 'utf-8');
+const _b = parseCSV(readFileSync(join(_td, 'b.csv'), 'utf-8'));
+ok(_b.length === 1, 'CSV 引号含逗号 1 行');
+ok(_b[0][0] === 'a,b', 'CSV 引号内逗号保留');
+
+// CSV: 引号转义 ""
+writeFileSync(join(_td, 'c.csv'), 'name\n"say ""hi"""\n', 'utf-8');
+const _c = parseCSV(readFileSync(join(_td, 'c.csv'), 'utf-8'));
+ok(_c[0][0] === 'say "hi"', 'CSV 双引号转义正确');
+
+// CSV: UTF-8 BOM
+writeFileSync(join(_td, 'd.csv'), '\uFEFFkeyword\n中文\n', 'utf-8');
+const _d = parseCSV(readFileSync(join(_td, 'd.csv'), 'utf-8'));
+ok(_d[0][0] === '中文', 'CSV BOM 去除后中文正确');
+
+// CSV: 空行过滤
+writeFileSync(join(_td, 'e.csv'), 'keyword\nfoo\n\n\nbar\n', 'utf-8');
+const _e = parseCSV(readFileSync(join(_td, 'e.csv'), 'utf-8'));
+ok(_e.length === 2, 'CSV 空行过滤为 2 行');
+
+// TXT: 制表符分隔
+writeFileSync(join(_td, 'f.txt'), 'name\tdesc\nfoo\tbar\nbaz\tqux\n', 'utf-8');
+const _f = parseTXT(readFileSync(join(_td, 'f.txt'), 'utf-8'));
+ok(_f.length === 2, 'TXT 制表符 2 行');
+ok(_f[0][1] === 'bar', 'TXT 制表符第二列正确');
+
+// TXT: 整行单列
+writeFileSync(join(_td, 'g.txt'), 'keyword\nhello\nworld\n', 'utf-8');
+const _g = parseTXT(readFileSync(join(_td, 'g.txt'), 'utf-8'));
+ok(_g.length === 2, 'TXT 单列 2 行');
+ok(_g[0][0] === 'hello', 'TXT 单列首行正确');
+
+// TXT: 分号分隔
+writeFileSync(join(_td, 'h.txt'), 'a;b\n1;2\n3;4\n', 'utf-8');
+const _h = parseTXT(readFileSync(join(_td, 'h.txt'), 'utf-8'));
+ok(_h.length === 2 && _h[0][0] === '1' && _h[0][1] === '2', 'TXT 分号分隔正确');
 
 // ── 14. 错误处理 ──
 console.log('\n## 14. 错误处理');
@@ -310,6 +385,16 @@ try {
 } finally {
   writeFileSync(cfgPath, cfgBackup, 'utf-8');
 }
+
+// readTable 对 xlsx 显式报错
+writeFileSync(join(_td, 'fake.xlsx'), 'not a real xlsx', 'utf-8');
+const xlsxCfg = `site.x.url = "https://x.com"\nsite.x.user = "u"\nsite.x.pass = "p p p p p p p p"\nsite.x.keywords = ["${join(_td, 'fake.xlsx').replace(/\\/g, '/')}"]\nsite.x.products = ""\nsite.x.prompts = ""`;
+writeFileSync(cfgPath, xlsxCfg, 'utf-8');
+const xlsxRes = run('wbp.mjs', ['pick']);
+ok(xlsxRes.status !== 0, 'readTable 对 xlsx 退出码非零');
+const xlsxOut = xlsxRes.stderr + xlsxRes.stdout;
+ok(xlsxOut.includes('不支持的数据格式'), 'xlsx 报错含不支持字样');
+writeFileSync(cfgPath, cfgBackup, 'utf-8');
 
 // ── 15. AGENTS.md 验证 ──
 console.log('\n## 15. AGENTS.md 验证');
@@ -346,8 +431,8 @@ const defaultConfig = {
       user: 'admin',
       pass: 'abcd efgh ijkl mnop',
       categories: [1, 2, 3],
-      keywords: ['data/keywords.xlsx'],
-      products: 'data/products.xlsx',
+      keywords: ['data/keywords.csv'],
+      products: 'data/products.csv',
       prompts: 'data/prompts.md',
       extensions: ['data/extensions/wiedza.md'],
       cdn: { mode: 's3' }
@@ -360,7 +445,7 @@ ok(cfgContent.includes('url = "https://example.com/wp-json/wp/v2"'), '包含默�
 ok(cfgContent.includes('user = "admin"'), '包含默认用户名');
 ok(cfgContent.includes('pass = "abcd efgh ijkl mnop"'), '包含默认密码');
 ok(cfgContent.includes('categories = [1,2,3]'), '包含默认分类');
-ok(cfgContent.includes('keywords = ["data/keywords.xlsx"]'), '包含默认关键词文件');
+ok(cfgContent.includes('keywords = ["data/keywords.csv"]'), '包含默认关键词文件');
 ok(cfgContent.includes('cdn.mode = "s3"'), '包含默认 S3 配置');
 
 // 17.3 测试 parseCategories
