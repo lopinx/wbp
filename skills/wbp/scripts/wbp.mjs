@@ -882,8 +882,8 @@ async function doConfigWizard(nonInteractive = false) {
           user: 'admin',
           pass: 'abcd efgh ijkl mnop',
           categories: [1, 2, 3],
-          keywords: ['data/keywords.xlsx'],
-          products: 'data/products.xlsx',
+          keywords: ['data/keywords.csv'],
+          products: 'data/products.csv',
           prompts: 'data/prompts.md',
           extensions: ['data/extensions/wiedza.md'],
           cdn: { mode: 's3' }
@@ -907,8 +907,8 @@ async function doConfigWizard(nonInteractive = false) {
           user: 'admin',
           pass: 'abcd efgh ijkl mnop',
           categories: [1, 2, 3],
-          keywords: ['data/keywords.xlsx'],
-          products: 'data/products.xlsx',
+          keywords: ['data/keywords.csv'],
+          products: 'data/products.csv',
           prompts: 'data/prompts.md',
           extensions: ['data/extensions/wiedza.md'],
           cdn: { mode: 's3' }
@@ -970,14 +970,14 @@ async function doConfigWizard(nonInteractive = false) {
     {
       key: 'keywords',
       question: '关键词文件路径（多个用逗号分隔，相对 ~/.wbp 或绝对路径）',
-      default: 'data/keywords.xlsx',
+      default: 'data/keywords.csv',
       validator: v => v.trim().length > 0 || '关键词文件路径不能为空',
       transform: v => v.split(',').map(s => s.trim()).filter(Boolean)
     },
     {
       key: 'products',
       question: '产品文件路径（相对 ~/.wbp 或绝对路径）',
-      default: 'data/products.xlsx',
+      default: 'data/products.csv',
       validator: v => v.trim().length > 0 || '产品文件路径不能为空'
     },
     {
