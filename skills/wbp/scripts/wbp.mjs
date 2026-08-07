@@ -525,7 +525,6 @@ async function doInstall() {
   console.log('=== 注册全局命令（npm link）===');
   let linked = false;
   try {
-    execSync('npm install', { cwd: SRC_DIR, stdio: 'inherit' });
     execSync('npm link', { cwd: SRC_DIR, stdio: 'inherit' });
     try { chmodSync(SRC_MJS, 0o755); } catch { /* Windows/.cmd shim 不需可执行位 */ }
     linked = true;
@@ -537,7 +536,7 @@ async function doInstall() {
 
   // ── 复制数据文件（引用数据无条件更新，用户配置文件不覆盖）──
   if (existsSync(DATA_SRC)) {
-    const REF_FILES = ['keywords.xlsx', 'products.xlsx', 'prompts.md'];
+    const REF_FILES = ['keywords.csv', 'products.csv', 'prompts.md'];
     const REF_DIRS = ['extensions'];
     const cp = (src, dst) => {
       if (!existsSync(dst)) mkdirSync(dst, { recursive: true });
@@ -566,22 +565,20 @@ async function doInstall() {
     writeFileSync(knowledgePath, `# 领域知识\n\n## 行业术语\n- 保持专业度\n- 解释生僻术语\n\n## 注意事项\n- 避免过度营销\n- 引用来源\n`, 'utf-8');
   }
 
-  // ── 创建示例 keywords.xlsx + products.xlsx（仅当文件不存在）──
-  const ExcelJS = (await import('exceljs')).default;
-  const keywordsPath = join(WP_DIR, 'data', 'keywords.xlsx');
+  // ── 创建示例 keywords.csv + products.csv（仅当文件不存在）──
+  const keywordsPath = join(WP_DIR, 'data', 'keywords.csv');
   if (!existsSync(keywordsPath)) {
-    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('keywords');
-    ws.addRow(['keyword']);
-    for (const k of ['人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全']) ws.addRow([k]);
-    await wb.xlsx.writeFile(keywordsPath);
+    const rows = ['keyword', '人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全'];
+    writeFileSync(keywordsPath, '\uFEFF' + rows.map(r => r.includes(',') ? `"${r}"` : r).join('\n') + '\n', 'utf-8');
   }
-  const productsPath = join(WP_DIR, 'data', 'products.xlsx');
+  const productsPath = join(WP_DIR, 'data', 'products.csv');
   if (!existsSync(productsPath)) {
-    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('products');
-    ws.addRow(['name', 'price', 'desc']);
-    ws.addRow(['产品A', 99, '基础版']);
-    ws.addRow(['产品B', 199, '高级版']);
-    await wb.xlsx.writeFile(productsPath);
+    const lines = [
+      ['name', 'price', 'desc'],
+      ['产品A', '99', '基础版'],
+      ['产品B', '199', '高级版']
+    ];
+    writeFileSync(productsPath, '\uFEFF' + lines.map(r => r.map(f => f.includes(',') ? `"${f}"` : f).join(',')).join('\n') + '\n', 'utf-8');
   }
 
   // ── 生成配置文件（交互式或非交互式）──
@@ -590,7 +587,7 @@ async function doInstall() {
     console.log(`全局命令：wbp（任意目录可用：wbp pick / wbp publish / wbp init）`);
     console.log(`升级方式：cd 仓库目录 && git pull（npm link 保持有效，无需重装）`);
   } else {
-    console.log(`核心文件：${join(WP_DIR, 'wbp.mjs')}`);
+    console.log(`未全局化：直接 node ${SRC_MJS} 调用`);
   }
   console.log(`配置文件：${join(WP_DIR, 'setting.toml')}（运行 wbp init 创建）`);
   console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：');
