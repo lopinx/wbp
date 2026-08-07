@@ -127,13 +127,18 @@ function validateDraft(draft) {
 
 // ── 迷你 TOML 解析器 ──
 function parseToml(t) {
-  const r = {}; let path = [];
+  const r = {}; let sectionPath = [];
   for (const l of t.split('\n')) {
     const v = l.trim();
     if (!v || v.startsWith('#')) continue;
     const m = v.match(/^\[([^\]]+)\]$/);
-    if (m) { path = m[1].split('.'); continue; }
-    const kv = v.match(/^(\w+)\s*=\s*(.+)$/);
+    if (m) {
+      // [section.sub] 头：后续 key = value 挂到此路径下
+      // ponytail: tomlString 生成点表示法（无 section 头），但 parseToml 也需支持手动写的 [section] 头
+      sectionPath = m[1].split('.');
+      continue;
+    }
+    const kv = v.match(/^([\w.]+)\s*=\s*(.+)$/);
     if (!kv) continue;
     let val = kv[2].trim();
     let inStr = false, strQuote = '', escaped = false;
@@ -141,8 +146,8 @@ function parseToml(t) {
       const c = val[i];
       if (escaped) { escaped = false; continue; }
       if (c === '\\') { escaped = true; continue; }
-      if ((c === '"' || c === "'") && !inStr) { inStr = true; strQuote = c; }
-      else if (c === strQuote && inStr) { inStr = false; strQuote = ''; }
+      if ((c === '"' || c === "'") && !inStr) { inStr = true, strQuote = c; }
+      else if (c === strQuote && inStr) { inStr = false, strQuote = ''; }
       if (c === '#' && !inStr) { val = val.slice(0, i).trimEnd(); break; }
     }
     if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -153,7 +158,7 @@ function parseToml(t) {
         const arr = []; let current = '', inQuote = false, q = '';
         for (let i = 0; i < arrStr.length; i++) {
           const c = arrStr[i];
-          if (c === '"' || c === "'") { if (!inQuote) { inQuote = true; q = c; } else if (c === q) { inQuote = false; q = ''; } current += c; }
+          if (c === '"' || c === "'") { if (!inQuote) { inQuote = true, q = c; } else if (c === q) { inQuote = false, q = ''; } current += c; }
           else if (c === ',' && !inQuote) { arr.push(current.trim().replace(/^["']|["']$/g, '')); current = ''; }
           else { current += c; }
         }
@@ -164,12 +169,16 @@ function parseToml(t) {
     else if (val === 'true') val = true;
     else if (val === 'false') val = false;
     else if (/^-?\d+$/.test(val)) val = Number(val);
-    let o = r;
-    for (const p of path) o = o[p] = o[p] || {};
-    if (!isValidKey(kv[1])) {
-      throw new Error(`无效的 TOML 键: ${kv[1]}，只能包含字母、数字和下划线，且必须以字母或下划线开头`);
+    // 点表示法键（site.myblog.name）或 section 头下的简单键
+    const keyPath = sectionPath.concat(kv[1].split('.'));
+    for (const pk of keyPath) {
+      if (!isValidKey(pk)) {
+        throw new Error(`无效的 TOML 键: ${pk}，只能包含字母、数字和下划线，且必须以字母或下划线开头`);
+      }
     }
-    o[kv[1]] = val;
+    let o = r;
+    for (const p of keyPath.slice(0, -1)) o = o[p] = o[p] || {};
+    o[keyPath[keyPath.length - 1]] = val;
   }
   return r;
 }
@@ -788,36 +797,71 @@ async function doConfigWizard(nonInteractive = false) {
     return;
   }
 
+  // 非 TTY 且无 stdin 数据可读时（如 CI 管道关闭），使用默认配置
+  // ponytail: pipe 模式下 isTTY=false 但 readline 在 NNode 24 的 question() 对 pipe
+  //   的逐行消费不可靠（接口在 stdin 耗尽后立即 close，跳过后续 question），
+  //   故对 pipe 模式改用 readFileSync(0) 一次性读全部 stdin 再逐行消费。
+  let pipedLines = null;
   if (!isTTY) {
-    log('info', '非交互模式：使用默认配置');
-    // 使用默认配置
-    const defaultConfig = {
-      site: {
-        'myblog': {
-          name: 'My Blog',
-          url: 'https://example.com/wp-json/wp/v2',
-          user: 'admin',
-          pass: 'abcd efgh ijkl mnop',
-          categories: [1, 2, 3],
-          keywords: ['data/keywords.csv'],
-          products: 'data/products.csv',
-          prompts: 'data/prompts.md',
-          extensions: ['data/extensions/wiedza.md'],
-          cdn: { mode: 's3' }
-        }
+    try {
+      const stdinContent = readFileSync(0, 'utf-8');
+      pipedLines = stdinContent.split('\n');
+      if (pipedLines.length === 0 || (pipedLines.length === 1 && pipedLines[0] === '')) {
+        log('info', '非交互模式（无 stdin）：使用默认配置');
+        const defaultConfig = {
+          site: {
+            'myblog': {
+              name: 'My Blog',
+              url: 'https://example.com/wp-json/wp/v2',
+              user: 'admin',
+              pass: 'abcd efgh ijkl mnop',
+              categories: [1, 2, 3],
+              keywords: ['data/keywords.csv'],
+              products: 'data/products.csv',
+              prompts: 'data/prompts.md',
+              extensions: ['data/extensions/wiedza.md'],
+              cdn: { mode: 's3' }
+            }
+          }
+        };
+        const toml = tomlString(defaultConfig);
+        writeFileSync(CFG, toml, 'utf-8');
+        log('info', '配置文件已创建于', CFG);
+        return;
       }
-    };
-    const toml = tomlString(defaultConfig);
-    writeFileSync(CFG, toml, 'utf-8');
-    log('info', '配置文件已创建于', CFG);
-    return;
+    } catch {
+      // readFileSync(0) 失败（stdin 不可读），回退到默认配置
+      log('info', '非交互模式（stdin 不可读）：使用默认配置');
+      const defaultConfig = {
+        site: {
+          'myblog': {
+            name: 'My Blog',
+            url: 'https://example.com/wp-json/wp/v2',
+            user: 'admin',
+            pass: 'abcd efgh ijkl mnop',
+            categories: [1, 2, 3],
+            keywords: ['data/keywords.csv'],
+            products: 'data/products.csv',
+            prompts: 'data/prompts.md',
+            extensions: ['data/extensions/wiedza.md'],
+            cdn: { mode: 's3' }
+          }
+        }
+      };
+      const toml = tomlString(defaultConfig);
+      writeFileSync(CFG, toml, 'utf-8');
+      log('info', '配置文件已创建于', CFG);
+      return;
+    }
   }
 
   // 交互式模式
-  const readline = await import('readline').then(m => m.createInterface({
+  // ponytail: TTY 模式用 readline 逐行读；pipe 模式已通过 readFileSync(0) 读全部 stdin
+  const readline = isTTY ? (await import('readline').then(m => m.createInterface({
     input: process.stdin,
     output: process.stdout
-  }));
+  }))) : null;
+  let pipedIdx = 0;
 
   // 站点点名必须为合法 TOML 标识符（字母数字下划线，且不以数字开头）
   const isValidSlug = v => /^[A-Za-z_][A-Za-z0-9_]*$/.test(v);
@@ -896,18 +940,25 @@ async function doConfigWizard(nonInteractive = false) {
   const answers = {};
 
   for (const q of questions) {
-    const value = await new Promise(resolve => {
-      readline.question(`${q.question} [${q.default}]: `, input => {
-        resolve(input.trim() || q.default);
+    let value;
+    if (isTTY) {
+      value = await new Promise(resolve => {
+        readline.question(`${q.question} [${q.default}]: `, input => {
+          resolve(input.trim() || q.default);
+        });
       });
-    });
+    } else {
+      // pipe 模式：从已读取的 stdin 行中取下一行
+      const line = pipedIdx < pipedLines.length ? pipedLines[pipedIdx++] : '';
+      value = (line || '').trim() || q.default;
+    }
 
     // 验证：validator 返回 true 表示通过，返回字符串表示错误信息
     const error = q.validator(value);
     if (error !== true) {
       log('error', String(error));
       try {
-        readline.close();
+        if (readline) readline.close();
       } catch (e) {
         // readline 可能已经关闭，忽略错误
       }
@@ -940,7 +991,7 @@ async function doConfigWizard(nonInteractive = false) {
   writeFileSync(CFG, toml, 'utf-8');
   log('info', '配置文件已创建于', CFG);
 
-  readline.close();
+  if (readline) readline.close();
 }
 
 // ── 主函数 ──

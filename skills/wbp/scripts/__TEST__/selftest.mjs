@@ -73,7 +73,7 @@ function log(level, ...args) {
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log(`  ✓ ${msg}`); } else { fail++; console.log(`  ✗ ${msg}`); } }
 function error(msg) { fail++; console.log(`  ✗ ${msg}`); }
-function run(cmd, args) { return spawnSync(process.execPath, [cmd, ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8' }); }
+function run(cmd, args, opts) { return spawnSync(process.execPath, [cmd, ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8', ...opts }); }
 
 // ── 1. 语法检查 ──
 console.log('## 1. 语法检查');
@@ -414,7 +414,7 @@ console.log('\n## 17. 配置引导向导测试');
 
 // 17.1 测试非 TTY 回退
 console.log('\n  17.1 非 TTY 环境回退');
-const rInit1 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: '' });
+const rInit1 = run('wbp.mjs', ['init'], { stdio: ['pipe', 'pipe', 'pipe'], input: '' });
 ok(rInit1.status === 0, '非 TTY 环境退出码为 0');
 ok(existsSync(join(WP_DIR, 'setting.toml')), 'setting.toml 已创建');
 
@@ -495,22 +495,22 @@ if (existsSync(join(WP_DIR, 'setting.toml'))) unlinkSync(join(WP_DIR, 'setting.t
 
 // 17.7 测试站点点名验证
 console.log('\n  17.7 验证站点点名验证');
-const rInit4 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: 'my-blog\nhttps://x.com/wp-json/wp/v2\nadmin\npass\n\n\n\n\n' });
+const rInit4 = run('wbp.mjs', ['init'], { stdio: ['pipe', 'pipe', 'pipe'], input: 'my-blog\nhttps://x.com/wp-json/wp/v2\nadmin\npass\n\n\n\n\n' });
 ok(rInit4.status !== 0, '非法站点点名退出码非零');
 
 // 17.8 测试 URL 格式验证
 console.log('\n  17.8 验证 URL 格式验证');
-const rInit5 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: 'myblog\ninvalid-url\nadmin\npass\n\n\n\n\n\n' });
+const rInit5 = run('wbp.mjs', ['init'], { stdio: ['pipe', 'pipe', 'pipe'], input: 'myblog\ninvalid-url\nadmin\npass\n\n\n\n\n\n' });
 ok(rInit5.status !== 0, '格式错误的 URL 退出码非零');
 
 // 17.9 测试密码格式验证
 console.log('\n  17.9 验证密码格式验证');
-const rInit6 = run('wbp.mjs', ['init'], { stdio: ['ignore', 'pipe', 'pipe'], input: 'myblog\nhttps://x.com/wp-json/wp/v2\nshort\n\n\n\n\n\n' });
+const rInit6 = run('wbp.mjs', ['init'], { stdio: ['pipe', 'pipe', 'pipe'], input: 'myblog\nhttps://x.com/wp-json/wp/v2\nshort\n\n\n\n\n\n' });
 ok(rInit6.status !== 0, '格式错误的密码 退出码非零');
 const rInit7 = run('wbp.mjs', ['init', '--non-interactive']);
 ok(rInit7.status === 0, '图片模式选择成功');
 const cfg7 = readFileSync(join(WP_DIR, 'setting.toml'), 'utf-8');
-ok(cfg7.includes('cdn = { mode = "s3" }'), '默认图片模式为 S3');
+ok(cfg7.includes('cdn.mode = "s3"'), '默认图片模式为 S3');
 
 // 清理
 if (existsSync(join(WP_DIR, 'setting.toml'))) unlinkSync(join(WP_DIR, 'setting.toml'));
