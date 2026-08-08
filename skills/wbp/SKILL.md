@@ -13,7 +13,7 @@ argument-hint: "<任务描述> [数量]"
 # WordPress Publisher Skill
 
 ## Purpose
-跨平台 WordPress 发布 CLI 工具，兼容多种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学）。单命令工作流：从 CSV/TXT 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具，兼容 11 种 AI 工具（Claude Code、OpenAI Codex、OpenCode、Hermes、OpenClaw、小U同学、ZCode）。单命令工作流：从 CSV/TXT 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。
 
 ## When to Activate
 - 用户说 "发布文章"、"写博客"、"publish"、"wordpress"
@@ -30,7 +30,7 @@ wbp install --non-interactive  # 非交互式模式，使用默认配置
 
 安装脚本会自动：
 - 全局化 npm link（`npm link`）
-- **步骤 1**：检测本地已安装的 AI CLI（支持 10 种），交互式选择为哪些工具创建命令文件
+- **步骤 1**：检测本地已安装的 AI CLI（支持 11 种，含 ZCode），交互式选择为哪些工具创建命令文件
 - **步骤 2**：启动 WordPress 配置向导（10 个问题）或生成默认配置
 
 ### 1. 选取关键词
@@ -127,4 +127,4 @@ wbp publish ~/.wbp/_draft.json
 - 草稿 JSON 必须包含 title、content/excerpt、tags
 - 发布前会自动检查重复标题和质量
 - 如果质量检查不通过，需要补充内容后再发布
-- 安装脚本会自动检测本地 AI CLI，仅为已安装的工具创建命令文件
+- 安装脚本会自动检测本地 AI CLI，仅为已安装的工具创建命令文件（支持 11 种工具：Claude Code、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、小U同学、Cursor、GitHub Copilot、OpenCode、Hermes、ZCode）

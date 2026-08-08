@@ -469,7 +469,7 @@ async function doInstall() {
   const DATA_DST = join(WP_DIR, 'data');
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
 
-  // ── Agent Skills 路径配置（开放标准）──
+  // ── Agent Skills 路径配置（开放标准 + ZCode）──
   const AGENTS_SKILLS = {
     'claude': { name: 'Claude Code', dir: ['.claude', 'skills'], invoke: '/wbp', check: 'claude' },
     'codex': { name: 'OpenAI Codex', dir: ['.codex', 'skills'], invoke: '@wbp', check: 'codex' },
@@ -481,6 +481,7 @@ async function doInstall() {
     'copilot': { name: 'GitHub Copilot', dir: ['.github', 'skills'], invoke: '/wbp', check: 'copilot' },
     'opencode': { name: 'OpenCode', dir: ['.config', 'opencode', 'skills'], invoke: '/wbp', check: 'opencode' },
     'hermes': { name: 'Hermes', dir: ['.hermes', 'skills'], invoke: '/wbp', check: 'hermes' },
+    'zcode': { name: 'ZCode', dir: ['.zcode', 'skills'], invoke: '$wbp', check: 'zcode' },
   };
 
   // ── 辅助：检查 CLI 是否存在（白名单 + 安全参数）──
@@ -498,37 +499,40 @@ async function doInstall() {
     return found ? { ...tool, slug, path: join(homedir(), ...tool.dir) } : null;
   }).filter(Boolean);
 
-  // ── 所有检测到的工具都可安装；未检测到则提供全部候选 ──
-  const installableTools = detectedTools.length > 0
-    ? detectedTools
-    : Object.entries(AGENTS_SKILLS).map(([slug, tool]) => ({ ...tool, slug, path: join(homedir(), ...tool.dir) }));
+  // ── 仅提供已检测到的工具供选择（按需安装）──
+  const installableTools = detectedTools;
 
-  console.log(`\n检测到 ${installableTools.length} 个可安装工具：${installableTools.map(t => t.name).join(', ')}\n`);
-
-  // ── 交互式选择工具 ──
-  const nonInteractive = process.argv.includes('--non-interactive');
-  const isTTY = process.stdin.isTTY;
-  let selectedIndices;
-
-  if (!isTTY || nonInteractive) {
-    // 非 TTY 或 --non-interactive：跳过交互，默认安装所有检测到的工具
-    if (!isTTY) console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
-    selectedIndices = installableTools.map((_, index) => index);
+  if (installableTools.length === 0) {
+    console.log('\n⚠ 未检测到任何已安装的 AI 工具，跳过命令文件创建。');
+    console.log('   如需安装，请先安装对应的 AI CLI，然后重新运行 wbp install。\n');
   } else {
-    selectedIndices = await selectTools(installableTools);
+    console.log(`\n检测到 ${installableTools.length} 个可安装工具：${installableTools.map(t => t.name).join(', ')}\n`);
 
-    if (selectedIndices.length === 0) {
-      console.log('\n⚠ 未选择任何工具，跳过 AI 命令文件创建，继续后续配置。');
+    // ── 交互式选择工具 ──
+    const nonInteractive = process.argv.includes('--non-interactive');
+    const isTTY = process.stdin.isTTY;
+    let selectedIndices;
+
+    if (!isTTY || nonInteractive) {
+      // 非 TTY 或 --non-interactive：默认安装所有检测到的工具
+      if (!isTTY) console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
+      selectedIndices = installableTools.map((_, index) => index);
+    } else {
+      selectedIndices = await selectTools(installableTools);
+
+      if (selectedIndices.length === 0) {
+        console.log('\n⚠ 未选择任何工具，跳过 AI 命令文件创建，继续后续配置。');
+      }
     }
-  }
 
-  const selectedTools = selectedIndices.map(i => installableTools[i]);
+    const selectedTools = selectedIndices.map(i => installableTools[i]);
 
-  // ── 为选中的工具创建命令文件 ──
-  console.log('\n正在创建 AI 工具命令文件...\n');
-  for (const tool of selectedTools) {
-    const promptContent = generatePromptContent(tool);
-    createCommandFile(tool, promptContent);
+    // ── 为选中的工具创建命令文件 ──
+    console.log('\n正在创建 AI 工具命令文件...\n');
+    for (const tool of selectedTools) {
+      const promptContent = generatePromptContent(tool);
+      createCommandFile(tool, promptContent);
+    }
   }
 
   // ── npm link 全局化：一处安装，全局调用 ──
