@@ -1,0 +1,46 @@
+{
+  "name": "@lopinx/wpb",
+  "version": "1.1.2",
+  "description": "Cross-platform WordPress AI publisher CLI — pick keyword, generate content, mix images, publish via REST API",
+  "main": "skills/wpb/scripts/wpb.mjs",
+  "bin": {
+    "wpb": "skills/wpb/scripts/wpb.mjs"
+  },
+  "scripts": {
+    "start": "node skills/wpb/scripts/wpb.mjs",
+    "test": "node skills/wpb/scripts/__TEST__/selftest.mjs",
+    "pick": "node skills/wpb/scripts/wpb.mjs pick",
+    "publish": "node skills/wpb/scripts/wpb.mjs publish --"
+  },
+  "keywords": [
+    "wordpress",
+    "publisher",
+    "cli",
+    "ai",
+    "s3",
+    "qiniu",
+    "minio"
+  ],
+  "author": "",
+  "license": "WTFPL",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lopinx/wpb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lopinx/wpb/issues"
+  },
+  "homepage": "https://github.com/lopinx/wpb#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "skills": {
+    "wpb": {
+      "path": "skills/wpb/SKILL.md"
+    }
+  },
+  "dependencies": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

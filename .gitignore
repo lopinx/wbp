@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.codegraph/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config
+.wpb/
+
+# Test artifacts
+*.tmp
+*.temp
+
+# Debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+
+# OMC runtime state
+.omc/
+
+# ZCode session state
+.zcode/
+
+# CodeGraph index
+.codegraph/
+
+# TypeScript
+*.tsbuildinfo

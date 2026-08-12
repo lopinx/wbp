@@ -1,0 +1,17 @@
+node_modules/
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+.wpb/
+.zcode/
+.codegraph/
+.omc/
+.vscode/
+.idea/
+coverage/
+dist/
+build/
+*.tsbuildinfo
+lopinx-wpb-*.tgz
