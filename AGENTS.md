@@ -28,7 +28,7 @@
 - **仅 ES 模块**：使用 `import`/`export`，通过 `node wpb.mjs` 直接运行
 - **跨平台路径**：使用 `path.join` 和 `os.homedir()` 兼容 Windows/Unix
 - **无构建步骤**：直接运行源码，无需打包或编译
-- **安装方式**：`npm i -g github:lopinx/wpb`（bin 字段自动注册 wpb 命令），升级用 `npm update -g @lopinx/wpb`
+- **安装方式**：`npm i -g github:lopinx/wpb`（bin 字段自动注册 wpb 命令），升级用 `npm update -g @lopinx/wpb`，卸载用 `npm uninstall -g @lopinx/wpb`（手动清理 `~/.wpb`）
 - **提交规范**：每次任务完成使用 `rtk git` 提交到 GitHub
 
 ### 测试要求

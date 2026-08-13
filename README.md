@@ -78,6 +78,12 @@ npm i -g github:lopinx/wpb
 
 > **可选**：如需为本地已安装的 AI CLI 工具（Claude Code、Gemini CLI 等 11 种）创建命令文件，运行 `wpb install`。该命令在上述基础配置之上额外完成 AI CLI 检测 + 命令文件生成。
 
+> **卸载**：
+> ```bash
+> npm uninstall -g @lopinx/wpb
+> ```
+> 如需彻底清理，再手动删除用户数据目录：`rm -rf ~/.wpb`（Windows PowerShell：`Remove-Item -Recurse -Force $HOME\.wpb`）。
+
 ### 第 2 步：选取关键词
 
 ```bash
