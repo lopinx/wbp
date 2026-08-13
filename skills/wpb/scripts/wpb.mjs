@@ -267,7 +267,7 @@ function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SK
 
 function createCommandFile(tool, content) { const { dir } = tool; const filePath = join(homedir(), ...dir, 'wpb', 'SKILL.md'); try { if (!existsSync(dirname(filePath))) mkdirSync(dirname(filePath), { recursive: true }); writeFileSync(filePath, content, 'utf8'); console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`); } catch (e) { console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`); } }
 
-function parseSelection(answer, total) { if (!answer) return []; const a = answer.toLowerCase().trim(); if (a === 'all') return Array.from({ length: total }, (_, i) => i); return a.split(',').map(s => parseInt(s.trim(), 10)).filter(i => !isNaN(i) && i >= 1 && i <= total); }
+function parseSelection(answer, total) { if (!answer) return []; const a = answer.toLowerCase().trim(); if (a === 'all') return Array.from({ length: total }, (_, i) => i); return a.split(',').map(s => parseInt(s.trim(), 10)).filter(i => !isNaN(i) && i >= 1 && i <= total).map(i => i - 1); }
 
 async function selectTools(tools) { return new Promise(resolve => { console.log('\n请选择要安装的 AI 工具：\n'); tools.forEach((t, i) => console.log(`${i + 1}. ${t.name} — ${t.path}`)); console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：'); const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question('', ans => { rl.close(); const s = parseSelection(ans, tools.length); if (!s.length) { console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n'); resolve([]); } else resolve(s); }); }); }
 

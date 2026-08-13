@@ -319,6 +319,9 @@ ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并
 ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（改为运行时 initConfig）');
 const PKG = readFileSync(join(SCRIPT_DIR, '../../..', 'package.json'), 'utf-8');
 ok(!PKG.includes('"postinstall"'), 'package.json 无 postinstall 钩子（npm 安装不执行脚本）');
+// parseSelection 返回 0-based 索引（用户输入 1-based 编号），避免 detectedTools[idx] 越界
+ok(src.includes('function parseSelection'), 'wpb.mjs 包含 parseSelection 选择解析函数');
+ok(/parseSelection[\s\S]*?\.map\(i\s*=>\s*i\s*-\s*1\)/.test(src), "parseSelection 将 1-based 编号转换为 0-based 索引");
 
 // ── 12. 文档 ──
 console.log('\n## 12. 文档');
