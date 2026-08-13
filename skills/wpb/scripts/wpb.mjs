@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, writeSync, mkdirSync, readdirSync, statSync, copyFileSync } from 'fs';
-import { homedir } from 'os';
+import { homedir, platform } from 'os';
 import { join, resolve, sep, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { createHash, createHmac } from 'crypto';
 import readline from 'readline';
 import * as XLSX from 'xlsx';
+
+// Windows 控制台默认代码页为 936 (GBK)，Node 输出 UTF-8 字节会被按 GBK 解码导致乱码
+// （如「用法」显示为「鐢ㄦ硶」）。切换到 65001 (UTF-8) 让控制台正确解码。
+if (platform() === 'win32') {
+  try { execSync('chcp 65001', { stdio: 'ignore' }); } catch {}
+  // Node 24 TTY 以 UTF-8 写字节，控制台代码页改为 65001 后即可正确显示；
+  // 同时显式设置 stdout/stderr 默认编码为 UTF-8，保证管道/重定向场景也一致。
+  try { process.stdout.setDefaultEncoding('utf-8'); process.stderr.setDefaultEncoding('utf-8'); } catch {}
+}
 
 const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wpb'), CFG = join(WP_DIR, 'setting.toml');
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -339,7 +348,8 @@ function initConfig() {
 async function main() {
   const cmd = process.argv[2] || 'pick';
   if (cmd === 'install') { await doInstall(); return; }
-  if (!['pick', 'publish'].includes(cmd)) die('用法: node wpb.mjs [pick|publish <file>|install]');
+  if (cmd === 'init') die('未识别命令 "init"。如需初始化配置请用: wpb install\n用法: wpb [pick|publish <file>|install]');
+  if (!['pick', 'publish'].includes(cmd)) die('用法: wpb [pick|publish <file>|install]');
   if (!existsSync(CFG)) { initConfig(); die(`首次运行：已生成默认配置 ${CFG}\n请编辑后重新运行: wpb ${cmd}`); }
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
