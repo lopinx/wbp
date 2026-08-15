@@ -113,6 +113,15 @@ ok(r2.s.arr[1] === 'b', '数组元素 1');
 ok(r2.s.arr[2] === 'c', '数组元素 2');
 ok(Array.isArray(r2.s.empty), '空数组');
 ok(r2.s.empty.length === 0, '空数组有 0 个元素');
+// 数组元素内含逗号（引号保护）
+const r2b = pt(`[s]\narr = ["hello, world", "foo"]`);
+ok(r2b.s.arr.length === 2, '数组引号内逗号不分割');
+ok(r2b.s.arr[0] === 'hello, world', '数组含逗号元素正确');
+// 数组混用单双引号
+const r2c = pt(`[s]\narr = ["double", 'single']`);
+ok(r2c.s.arr.length === 2, '数组混用单双引号');
+ok(r2c.s.arr[0] === 'double', '数组双引号元素');
+ok(r2c.s.arr[1] === 'single', '数组单引号元素');
 
 // 单引号字符串
 const r3 = pt(`[s]\nname = 'hello'\npath = 'C:\\\\Users\\\\test'`);
@@ -290,6 +299,8 @@ ok(src.includes("用法: wpb publish"), 'publish 缺参数时显示用法');
 ok(/opts\?\.signal \|\| AbortSignal\.timeout/.test(src), 'fetchWithRetry signal 处理简化');
 // uploadImage 走 fetchWithRetry 重试
 ok(/await fetchWithRetry\(`\$\{site\.url/.test(src), 'uploadImage 走 fetchWithRetry 重试');
+// uploadImage decodeURIComponent 回退（非法 % 序列时用原始文件名而非 image.jpg）
+ok(/catch \{ raw = imgUrl\.split/.test(src), 'uploadImage decodeURI 失败时回退原始文件名');
 // generatePromptContent 为不同工具注入 invoke 前缀
 ok(src.includes('tool?.invoke'), 'generatePromptContent 注入 invoke 前缀');
 // mixImages 截断图片到可用位置数（不丢图）

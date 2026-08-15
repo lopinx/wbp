@@ -133,7 +133,7 @@ async function uploadImage(site, imgUrl) {
   const res = await fetchWithRetry(imgUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error('获取图片失败: ' + res.status);
   const buf = Buffer.from(await res.arrayBuffer());
-  let raw; try { raw = decodeURIComponent(imgUrl.split('?')[0].split('/').pop() || 'image.jpg'); } catch { raw = 'image.jpg'; }
+  let raw; try { raw = decodeURIComponent(imgUrl.split('?')[0].split('/').pop() || 'image.jpg'); } catch { raw = imgUrl.split('?')[0].split('/').pop() || 'image.jpg'; }
   const ext = '.' + ((raw.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i) || [])[1] || 'jpg');
   const name = (raw.replace(/\.(jpg|jpeg|png|gif|webp|avif)$/i, '') || 'image').replace(/[^\w\u0100-\u017F\u4e00-\u9fff.-]/g, '-').slice(0, 60) + ext;
   const boundary = '----' + Math.random().toString(36).slice(2), ctype = res.headers.get('content-type') || 'image/jpeg';
