@@ -84,7 +84,8 @@ async function fetchWithRetry(url, opts, retries = 3) {
   const backoff = i => 1000 * 2 ** i + Math.random() * 200;
   for (let i = 0; i <= retries; i++) {
     try {
-      const res = await fetch(url, { ...opts, signal: opts?.signal || AbortSignal.timeout(TIMEOUT_MS) });
+      // 每次重试创建新 signal：外部 signal 会被复用导致剩余时间递减，统一改用新建的 timeout signal
+      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS) });
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i >= retries) return res;
       const d = backoff(i); log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
@@ -300,10 +301,10 @@ url = "https://www.buchmistrz.com/wp-json/wp/v2"
 user = "admin"
 pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
 categories = [8603, "Disposable Vape"]  # 支持数字ID或名称，多个分类
-keywords = ["data/keywords.xlsx"]  # 可多个
-products = "data/products.xlsx"  # 可选
-prompts = "data/prompts.md"  # 可选
-extensions = []  # 可选
+keywords = ["data/keywords.xlsx"]  # 可多个，支持 https:// URL（如 Google Sheets）
+products = "data/products.xlsx"  # 可选，支持 https:// URL
+prompts = "data/prompts.md"  # 可选，支持 https:// URL
+extensions = []  # 可选，支持 https:// URL
 
 # 四种图片模式（选其一）：
 # 1) S3 兼容 — mode="s3" 拉图池混排，endpoint 可选
@@ -391,8 +392,8 @@ async function main() {
   const keywords = (await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
   let products = []; if (prodPath && pathOk(prodPath)) products = await readTable(prodPath);
-  let promptDoc = ''; if (promptPath && pathOk(promptPath)) promptDoc = isUrl(promptPath) ? (await (await fetch(promptPath)).text()).slice(0, 3000) : readFileSync(promptPath, 'utf-8').slice(0, 3000);
-  let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetch(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`;
+  let promptDoc = ''; if (promptPath && pathOk(promptPath)) promptDoc = isUrl(promptPath) ? (await (await fetchWithRetry(promptPath)).text()).slice(0, 3000) : readFileSync(promptPath, 'utf-8').slice(0, 3000);
+  let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`;
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
   if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: site.name, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }

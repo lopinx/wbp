@@ -325,8 +325,8 @@ ok(src.includes('#accessKeyId'), 'DEFAULT_CFG 使用 accessKeyId');
 ok(src.includes('#secretAccessKey'), 'DEFAULT_CFG 使用 secretAccessKey');
 // publish 命令缺少文件参数时提示用法
 ok(src.includes("用法: wpb publish"), 'publish 缺参数时显示用法');
-// fetchWithRetry signal 处理简化（不再二选一判断）
-ok(/opts\?\.signal \|\| AbortSignal\.timeout/.test(src), 'fetchWithRetry signal 处理简化');
+// fetchWithRetry 每次重试新建独立 signal（避免外部 signal 复用时剩余时间递减）
+ok(/signal: AbortSignal\.timeout\(TIMEOUT_MS\)/.test(src), 'fetchWithRetry 每次重试新建独立 signal');
 // uploadImage 走 fetchWithRetry 重试
 ok(/await fetchWithRetry\(`\$\{site\.url/.test(src), 'uploadImage 走 fetchWithRetry 重试');
 // uploadImage decodeURIComponent 回退（非法 % 序列时用原始文件名而非 image.jpg）
