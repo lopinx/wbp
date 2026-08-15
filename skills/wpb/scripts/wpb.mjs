@@ -219,7 +219,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
     if (!internalLinks.length) warnings.push('没有内部链接');
     const escOrigin = siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const rootRe = new RegExp(`^${escOrigin}/?$`);
-    const navRe = new RegExp(`^${escOrigin}/(category|tag|tagi|kategoria|produkty|shop|blog)(/[^/]+)*/?$`);
+    const navRe = new RegExp(`^${escOrigin}/(category|tag|kategoria|produkty|shop|blog)(/[^/]+)*/?$`);
     const productLinks = internalLinks.filter(u => !rootRe.test(u) && !navRe.test(u));
     if (productLinks.length < 3) warnings.push(`内链不足 (${productLinks.length} 条，建议≥3)`);
   }
@@ -250,7 +250,7 @@ async function doInstall() {
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
 
   // 用户手动运行 `wpb install`（TTY）时走完整 AI CLI 检测 + 命令文件创建流程；
-  // npm 自动配置由独立的 postinstall.mjs 完成（不依赖 xlsx）。
+  // 无 postinstall 钩子；npm 全局安装时用 symlink，脚本在 symlink 目标被清理后无法执行
   const checkCLI = cmd => { try { execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 3000 }); return true; } catch { return false; }; };
   const detectedTools = Object.entries(AGENTS_SKILLS).map(([slug, tool]) => { const found = checkCLI(slug) || existsSync(join(homedir(), ...tool.dir.slice(0, -1))); console.log(found ? `  ✓ 检测到 ${tool.name}` : `  ✗ 未找到 ${tool.name}`); return found ? { ...tool, slug, path: join(homedir(), ...tool.dir) } : null; }).filter(Boolean);
 
