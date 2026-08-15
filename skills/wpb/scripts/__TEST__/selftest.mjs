@@ -378,6 +378,10 @@ ok(/page <= 20/.test(src), 'findOrCreate 分页上限 20 页');
 ok(src.includes('Array.isArray(batch)'), 'findOrCreate 非数组响应时 break');
 // checkDuplicate 标题截断保护（防超长标题导致 WP 搜索异常）
 ok(src.includes('title.slice(0, 100)'), 'checkDuplicate 标题截断至 100 字符');
+// uploadExternalImages 空 siteOrigin 防护（防止空字符串匹配导致跳过所有图片上传）
+ok(/siteOrigin && url\.startsWith\(siteOrigin\)/.test(src), 'uploadExternalImages 空 siteOrigin 时不跳过上传');
+// checkQuality 关键词正则转义防护（用户标签含正则元字符时不注入）
+ok(src.includes('k.replace(/[.'), 'checkQuality 关键词正则转义防护');
 
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
 console.log('\n## 11. 安装逻辑');

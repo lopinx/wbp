@@ -147,7 +147,7 @@ function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.en
 async function uploadExternalImages(site, html) {
   const urls = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map(m => m[1]), results = {};
   const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
-  for (const url of urls) { if (url.startsWith(siteOrigin) || results[url]) continue; try { log('info', `  正在上传: ${url.slice(0, 60)}...`); results[url] = await uploadImage(site, url); log('info', `  → ${results[url]}`); } catch (e) { log('warn', `  ⚠ 上传失败: ${e.message}`); } }
+  for (const url of urls) { if (siteOrigin && url.startsWith(siteOrigin) || results[url]) continue; try { log('info', `  正在上传: ${url.slice(0, 60)}...`); results[url] = await uploadImage(site, url); log('info', `  → ${results[url]}`); } catch (e) { log('warn', `  ⚠ 上传失败: ${e.message}`); } }
   return results;
 }
 
