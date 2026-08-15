@@ -394,10 +394,11 @@ async function main() {
   if (!existsSync(draftPath)) die('草稿文件不存在: ' + draftPath);
   let draft; try { draft = JSON.parse(readFileSync(draftPath, 'utf-8')); } catch (e) { die(`草稿文件 JSON 解析失败: ${e.message}\n文件: ${draftPath}`); }
   const v = validateDraft(draft); if (!v.valid) die('草稿验证失败: ' + v.errors.join('; '));
+  const cleanedContent = stripNitroPack(draft.content);
   const dup = await checkDuplicate(site, draft.title); if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
-  const q = await checkQuality(draft.title, draft.content, draft.excerpt, draft.tags || [], site); if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; ')); if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
+  const q = await checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site); if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; ')); if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
   const catIds = await resolveCategoryIds(site, site.categories);
-  let finalContent = stripNitroPack(draft.content); let tagIds = [];
+  let finalContent = cleanedContent; let tagIds = [];
   if (site.cdn && site.cdn.mode === 'search') { try { images = await searchImages(site.images || {}, draft.tags || [], draft.title); } catch (e) { log('warn', '图片搜索失败:', e.message); } if (images.length) finalContent = mixImages(finalContent, images); }
   else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
   else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
