@@ -53,11 +53,11 @@ function parseToml(t) {
 
 // ── 数据表读取（SheetJS）──
 async function readTable(p) {
-  const isUrl = /^https?:\/\//i.test(p);
+  const url = isUrl(p);
   let data;
-  if (isUrl) { const res = await fetchWithRetry(p, { signal: AbortSignal.timeout(TIMEOUT_MS) }); if (!res.ok) throw new Error('URL 获取失败: ' + res.status + ' ' + p); data = await res.arrayBuffer(); }
+  if (url) { const res = await fetchWithRetry(p, { signal: AbortSignal.timeout(TIMEOUT_MS) }); if (!res.ok) throw new Error('URL 获取失败: ' + res.status + ' ' + p); data = await res.arrayBuffer(); }
   else { if (!existsSync(p)) throw new Error('文件未找到: ' + p); data = readFileSync(p); }
-  const wb = XLSX.read(data, { type: isUrl ? 'array' : 'buffer', cellDates: false });
+  const wb = XLSX.read(data, { type: url ? 'array' : 'buffer', cellDates: false });
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
   return rows.slice(1).filter(r => Array.isArray(r) && r.some(v => String(v).trim() !== ''));
 }
@@ -171,7 +171,7 @@ async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats)
 // NitroPack 将原始图片 URL 包装为：https://cdn-<sub>.nitrocdn.com/<token>/assets/images/optimized/rev-<hash>/<原始URL>
 // 此函数剥离 CDN 前缀，还原原始图片 URL
 function stripNitroPack(html) {
-  return html.replace(/https:\/\/cdn-[\w-]+\.nitrocdn\.com\/[\w]+\/assets\/images\/optimized\/rev-[\w]+\//g, '');
+  return html.replace(/https?:\/\/cdn-[\w-]+\.nitrocdn\.com\/[\w]+\/assets\/images\/optimized\/rev-[\w]+\//g, '');
 }
 
 // ── 图片混排 ──
@@ -207,7 +207,7 @@ function mixImages(html, images) {
     const pos = slots[Math.min(si, slots.length - 1)];
     const a = escAttr(imgAlt(used[i]));
     parts.push(html.slice(last, pos));
-    parts.push(`<figure><img src="${used[i]}" alt="${a}" title="${a}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>`);
+    parts.push(`<figure><img src="${escAttr(used[i])}" alt="${a}" title="${a}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>`);
     last = pos;
     si += step;
   }
@@ -395,7 +395,7 @@ async function main() {
   let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`;
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
-  if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }
+  if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: site.name, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }
 
   // ── publish ──
   const draftPath = process.argv[3];

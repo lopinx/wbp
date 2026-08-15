@@ -436,6 +436,14 @@ ok(src.includes('extHref.slice(0, 3)'), '死链检测取外链前 3 个（非所
 ok(src.includes('if (extHref.length)'), '死链检测仅在有外链时执行');
 // site.name 仅在未配置时回退为 section slug（不覆盖用户显式配置）
 ok(src.includes('if (!site.name) site.name = siteName'), 'site.name 仅在未配置时回退为 slug');
+// pick 输出使用 site.name 而非 siteName（与 site.name 回退逻辑一致）
+ok(src.includes('name: site.name,'), 'pick 输出使用 site.name（非 slug）');
+// readTable 复用全局 isUrl（无局部变量遮蔽）
+ok(!/function readTable[\s\S]*?const isUrl =/.test(src), 'readTable 无 isUrl 局部变量遮蔽');
+// stripNitroPack 正则同时支持 http:// 和 https://
+ok(/https\?\:.*cdn-/.test(src), 'stripNitroPack 正则支持 http/https 双协议');
+// mixImages src 属性也经 escAttr 转义（防 URL 中双引号注入）
+ok(src.includes('src="${escAttr(used[i])}"'), 'mixImages src 属性经 escAttr 转义');
 
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
 console.log('\n## 11. 安装逻辑');
