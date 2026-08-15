@@ -319,6 +319,30 @@ ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
     ok(true, 'searchImages query 功能测试无异常');
   }
 }
+// mixImages alt/title HTML 特殊字符转义
+{
+  const escMix = mix('<p>P1</p><p>P2</p>', ['https://x.com/red-shoe.jpg']);
+  // 正常 alt 不含未转义的引号（不会产生额外的引号属性）
+  ok(/alt="[^"]*"/.test(escMix), 'alt 属性正确闭合');
+  // 验证 escAttr 函数存在
+  ok(src.includes('escAttr'), 'mixImages 包含 escAttr 转义函数');
+}
+// validateDraft 对非对象输入的处理
+{
+  // validateDraft 是箭头函数赋值，用 eval 提取（匹配到 return 语句末尾，不含源码分号）
+  const vdSrc = src.match(/const validateDraft = d => \{[\s\S]*?return \{ valid: e\.length === 0, errors: e \}; \}/);
+  if (!vdSrc) error('validateDraft 函数提取失败');
+  else {
+    const vd = eval('(function() { ' + vdSrc[0] + '; return validateDraft; })()');
+    ok(vd(null).valid === false, 'validateDraft(null) 返回 invalid');
+    ok(vd(null).errors[0].includes('JSON 对象'), 'validateDraft(null) 错误提示含 JSON 对象');
+    ok(vd(42).valid === false, 'validateDraft(42) 返回 invalid');
+    ok(vd([1, 2]).valid === false, 'validateDraft(数组) 返回 invalid');
+  }
+}
+// s3List 必填字段校验（bucket/region，endpoint 配置时豁免）
+ok(src.includes('S3 配置缺少 bucket'), 's3List 校验 bucket 必填');
+ok(src.includes('S3 配置缺少 region'), 's3List 校验 region 必填');
 // 文件名清理支持拉丁扩展补充区（波兰语带附加符号字符）
 ok(src.includes('\\u0100-\\u017F'), '文件名清理保留波兰语带附加符号字符');
 ok(src.includes('\\u4e00-\\u9fff'), '文件名清理保留中日韩字符');

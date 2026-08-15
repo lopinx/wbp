@@ -28,7 +28,7 @@ const asArray = x => Array.isArray(x) ? x : [x];
 const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 const safePath = p => { if (!p) return null; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 ~/.wpb: ${p} (解析为 ${a})`); return a; };
 function isValidKey(k) { return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k); }
-const validateDraft = d => { const e = []; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); return { valid: e.length === 0, errors: e }; };
+const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); return { valid: e.length === 0, errors: e }; };
 
 // ── 迷你 TOML 解析器 ──
 function parseToml(t) {
@@ -96,6 +96,8 @@ async function fetchWithRetry(url, opts, retries = 3) {
 // ── S3 列表 ──
 async function s3List(cfg, limit) {
   const { endpoint, region, bucket, prefix = '' } = cfg;
+  if (!bucket && !endpoint) throw new Error('S3 配置缺少 bucket（且未配置 endpoint）');
+  if (!region && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID || cfg.accessKeyId || cfg.key;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || cfg.secretAccessKey || cfg.secret;
   if (!accessKeyId || !secretAccessKey) throw new Error('S3 凭据未配置（accessKeyId/secretAccessKey 或环境变量 AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY）');
@@ -186,13 +188,14 @@ function mixImages(html, images) {
   if (!slots.length) return html;
   const step = Math.max(1, Math.floor(slots.length / used.length));
   // 从图片 URL 提取文件名作为 alt/title 文本（利于 SEO 和无障碍）
+  const escAttr = s => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const imgAlt = u => { try { const n = decodeURIComponent(new URL(u, 'http://x').pathname).split('/').pop().replace(/\.[^.]+$/, ''); return (n || 'image').replace(/[-_]+/g, ' ').trim(); } catch { return 'image'; } };
   const parts = [];
   let last = 0;
   let si = 0;
   for (let i = 0; i < used.length && si < slots.length; i++) {
     const pos = slots[Math.min(si, slots.length - 1)];
-    const a = imgAlt(used[i]);
+    const a = escAttr(imgAlt(used[i]));
     parts.push(html.slice(last, pos));
     parts.push(`<figure><img src="${used[i]}" alt="${a}" title="${a}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>`);
     last = pos;
