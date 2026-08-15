@@ -147,7 +147,7 @@ async function uploadImage(site, imgUrl) {
 
 function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.env.WP_PASSWORD || site.pass}`).toString('base64'); }
 async function uploadExternalImages(site, html) {
-  const urls = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)].map(m => m[1]), results = {};
+  const urls = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]), results = {};
   const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
   for (const url of urls) { if (siteOrigin && url.startsWith(siteOrigin) || results[url]) continue; try { log('info', `  正在上传: ${url.slice(0, 60)}...`); results[url] = await uploadImage(site, url); log('info', `  → ${results[url]}`); } catch (e) { log('warn', `  ⚠ 上传失败: ${e.message}`); } }
   return results;
@@ -163,7 +163,7 @@ async function findOrCreate(site, type, name, cache) {
   cache.set(key, item.id); return item.id;
 }
 
-async function checkDuplicate(site, title) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.title && p.title.rendered === title) || null; }
+async function checkDuplicate(site, title) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.title && (p.title.raw === title || p.title.rendered === title)) || null; }
 
 async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats).map(c => { const isId = typeof c === 'number' || /^\d+$/.test(String(c)); return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache); })); }
 
@@ -250,7 +250,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const extHref = allLinks.filter(u => !siteOrigin || !u.startsWith(siteOrigin));
   if (!extHref.length) warnings.push('E-E-A-T 信号不足 (无外部权威外链，建议引用权威来源链接)');
   if (extHref.length) {
-    const codes = await Promise.all(extHref.slice(0, 3).map(u => fetch(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }).then(r => r.status).catch(() => null)));
+    const codes = await Promise.all(extHref.slice(0, 3).map(async u => { try { const r = await fetchWithRetry(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }); return r.status; } catch { return null; } }));
     const dead = codes.filter(c => c !== null && c >= 400 && c < 500).length;
     if (dead) issues.push(`失效链接: ${dead} 个`);
   }
@@ -391,8 +391,8 @@ async function main() {
   const keywords = (await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
   let products = []; if (prodPath && pathOk(prodPath)) products = await readTable(prodPath);
-  let promptDoc = ''; if (promptPath && pathOk(promptPath)) promptDoc = readFileSync(promptPath, 'utf-8').slice(0, 3000);
-  let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`;
+  let promptDoc = ''; if (promptPath && pathOk(promptPath)) promptDoc = isUrl(promptPath) ? (await (await fetch(promptPath)).text()).slice(0, 3000) : readFileSync(promptPath, 'utf-8').slice(0, 3000);
+  let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetch(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`;
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
   if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: site.name, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }

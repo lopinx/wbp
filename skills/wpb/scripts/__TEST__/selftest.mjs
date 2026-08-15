@@ -299,7 +299,7 @@ ok(src.includes('tags.length < 3'), '标签数量下限为 3');
 ok(src.includes('tags.length > 10'), '标签数量上限为 10');
 // 死链检测使用 GET 而非 HEAD（避免 HEAD 被拒误判）
 ok(src.includes("method: 'GET'"), '死链检测使用 GET 而非 HEAD');
-ok(src.includes('catch(() => null)'), '死链检测网络错误返回 null 而非 500');
+ok(src.includes('catch { return null; }'), '死链检测网络错误返回 null 而非 500');
 ok(/c >= 400 && c < 500/.test(src), '死链仅计 4xx（5xx 和网络错误不计）');
 // navRe 支持多层子路径（如 /category/vape/disposable 不被误判为产品链接）
 ok(/\(\/\[\^\/\]\+\)\*\//.test(src), 'navRe 支持多层子路径匹配');
@@ -444,6 +444,15 @@ ok(!/function readTable[\s\S]*?const isUrl =/.test(src), 'readTable 无 isUrl �
 ok(/https\?\:.*cdn-/.test(src), 'stripNitroPack 正则支持 http/https 双协议');
 // mixImages src 属性也经 escAttr 转义（防 URL 中双引号注入）
 ok(src.includes('src="${escAttr(used[i])}"'), 'mixImages src 属性经 escAttr 转义');
+// checkDuplicate 比较 title.raw 和 title.rendered（兼容 WordPress 格式化标题）
+ok(src.includes('p.title.raw === title || p.title.rendered === title'), 'checkDuplicate 比较 title.raw 和 title.rendered');
+// 死链检测使用 fetchWithRetry 而非裸 fetch（支持重试）
+ok(src.includes('fetchWithRetry(u, { method:'), '死链检测使用 fetchWithRetry 重试');
+// uploadExternalImages img src 正则同时匹配单引号和双引号
+ok(src.includes("src=[\"']([^\"']+)[\"']"), 'uploadExternalImages img src 正则匹配单双引号');
+// prompts/extensions 支持 URL 路径（isUrl 判断后走 fetch 而非 readFileSync）
+ok(src.includes('isUrl(promptPath)'), 'prompts 支持 URL 路径');
+ok(src.includes('isUrl(ep)'), 'extensions 支持 URL 路径');
 
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
 console.log('\n## 11. 安装逻辑');
