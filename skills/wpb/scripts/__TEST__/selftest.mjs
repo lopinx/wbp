@@ -180,6 +180,8 @@ const mix = eval('(function() { var PARA_RE = /<p[^>]*>[\\s\\S]*?<\\/p>/g; ' + m
 const html5 = '<p>P1</p><p>P2</p><p>P3</p>';
 const mixed = mix(html5, ['img1.jpg']);
 ok(mixed.includes('<figure><img src="img1.jpg"'), '图片已插入');
+ok(mixed.includes('alt="img1"'), 'img 含 alt 属性（从文件名派生）');
+ok(mixed.includes('title="img1"'), 'img 含 title 属性（从文件名派生）');
 ok(mixed.includes('<p>P1</p>'), '段落 1 保留');
 ok(mixed.includes('<p>P2</p>'), '段落 2 保留');
 ok(mixed.includes('<p>P3</p>'), '段落 3 保留');
@@ -218,6 +220,11 @@ ok(attrMix.includes('id="p2"'), '保留段落 ID');
 const moreImgs = mix('<p>P1</p><p>P2</p>', ['i1.jpg', 'i2.jpg', 'i3.jpg']);
 const moreImgCount = (moreImgs.match(/<figure>/g) || []).length;
 ok(moreImgCount === 1, '图片多于可用位置时截断');
+
+// alt/title 从复杂 URL 派生（解码、分隔符转空格、去扩展名）
+const complexMix = mix('<p>P1</p><p>P2</p>', ['https://cdn.example.com/images/red-shoe-front_view.JPG']);
+ok(complexMix.includes('alt="red shoe front view"'), '复杂 URL 正确派生 alt 文本');
+ok(complexMix.includes('title="red shoe front view"'), '复杂 URL 正确派生 title 文本');
 
 // 不插在小标题之后相邻位置
 const h3Html = '<h3>T1</h3><p>P1</p><p>P2</p><h3>T2</h3><p>P3</p><p>P4</p><p>P5</p><h3>T3</h3><p>P6</p><p>P7</p><p>P8</p>';

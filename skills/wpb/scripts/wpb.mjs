@@ -180,13 +180,16 @@ function mixImages(html, images) {
   }
   if (!slots.length) return html;
   const step = Math.max(1, Math.floor(slots.length / used.length));
+  // 从图片 URL 提取文件名作为 alt/title 文本（利于 SEO 和无障碍）
+  const imgAlt = u => { try { const n = decodeURIComponent(new URL(u, 'http://x').pathname).split('/').pop().replace(/\.[^.]+$/, ''); return (n || 'image').replace(/[-_]+/g, ' ').trim(); } catch { return 'image'; } };
   const parts = [];
   let last = 0;
   let si = 0;
   for (let i = 0; i < used.length && si < slots.length; i++) {
     const pos = slots[Math.min(si, slots.length - 1)];
+    const a = imgAlt(used[i]);
     parts.push(html.slice(last, pos));
-    parts.push(`<figure><img src="${used[i]}" alt="" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>`);
+    parts.push(`<figure><img src="${used[i]}" alt="${a}" title="${a}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>`);
     last = pos;
     si += step;
   }
