@@ -247,6 +247,32 @@ const allH3 = '<h3>T1</h3><p>P1</p><h3>T2</h3><p>P2</p>';
 const allH3Mix = mix(allH3, ['img.jpg']);
 ok(allH3 === allH3Mix, '所有位置都被 H3 占据时不插入图片');
 
+// NitroPack CDN URL 清理
+{
+  const npFn = src.match(/function stripNitroPack[\s\S]*?\n\}/);
+  ok(!!npFn, 'stripNitroPack 已定义');
+  if (npFn) {
+    const strip = eval('(function() { ' + npFn[0] + '; return stripNitroPack; })()');
+    // 标准 NitroPack URL
+    const html1 = '<img src="https://cdn-ileknfn.nitrocdn.com/IOCVOCGySKYBwXIBEBTNuNiOLiCeeeZn/assets/images/optimized/rev-f2ca40a/xxxx.com/xxxxxx.jpg" alt="t">';
+    const r1 = strip(html1);
+    ok(r1.includes('xxxx.com/xxxxxx.jpg'), 'NitroPack 前缀已剥离');
+    ok(!r1.includes('nitrocdn.com'), 'NitroPack CDN 域名已移除');
+    // 不同 token 和 rev hash
+    const html2 = '<img src="https://cdn-abc123.nitrocdn.com/DIFFERENT_TOKEN/assets/images/optimized/rev-abc123def456/example.com/img.png">';
+    const r2 = strip(html2);
+    ok(r2.includes('example.com/img.png'), '不同 token/rev 正确剥离');
+    // 无 NitroPack URL 时不变
+    const html3 = '<img src="https://example.com/normal.jpg">';
+    ok(strip(html3) === html3, '非 NitroPack URL 不变');
+    // 多个 NitroPack URL 混合普通 URL
+    const html4 = '<img src="https://cdn-x.nitrocdn.com/TOK/assets/images/optimized/rev-hash/a.com/1.jpg"><img src="https://b.com/2.jpg"><img src="https://cdn-y.nitrocdn.com/TOK2/assets/images/optimized/rev-hash2/c.com/3.jpg">';
+    const r4 = strip(html4);
+    ok(r4.includes('a.com/1.jpg') && r4.includes('b.com/2.jpg') && r4.includes('c.com/3.jpg'), '混合 URL 全部正确处理');
+    ok(!r4.includes('nitrocdn'), '混合 URL 中所有 NitroPack 前缀已移除');
+  }
+}
+
 // ── 7. 质量检查 ──
 console.log('\n## 7. 质量检查函数');
 const qcFn = src.match(/async function checkQuality[\s\S]*?\n\}/);

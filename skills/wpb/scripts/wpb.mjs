@@ -165,6 +165,13 @@ async function checkDuplicate(site, title) { const posts = await wpFetch(site, `
 
 async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats).map(c => { const isId = typeof c === 'number' || /^\d+$/.test(String(c)); return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache); })); }
 
+// ── NitroPack CDN URL 清理 ──
+// NitroPack 将原始图片 URL 包装为：https://cdn-<sub>.nitrocdn.com/<token>/assets/images/optimized/rev-<hash>/<原始URL>
+// 此函数剥离 CDN 前缀，还原原始图片 URL
+function stripNitroPack(html) {
+  return html.replace(/https:\/\/cdn-[\w-]+\.nitrocdn\.com\/[\w]+\/assets\/images\/optimized\/rev-[\w]+\//g, '');
+}
+
 // ── 图片混排 ──
 // 规则：图片插入段落之间，不得插在首段之前、尾段之后、小标题之后相邻位置
 function mixImages(html, images) {
@@ -390,7 +397,7 @@ async function main() {
   const dup = await checkDuplicate(site, draft.title); if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
   const q = await checkQuality(draft.title, draft.content, draft.excerpt, draft.tags || [], site); if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; ')); if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
   const catIds = await resolveCategoryIds(site, site.categories);
-  let finalContent = draft.content; let tagIds = [];
+  let finalContent = stripNitroPack(draft.content); let tagIds = [];
   if (site.cdn && site.cdn.mode === 'search') { try { images = await searchImages(site.images || {}, draft.tags || [], draft.title); } catch (e) { log('warn', '图片搜索失败:', e.message); } if (images.length) finalContent = mixImages(finalContent, images); }
   else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
   else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
