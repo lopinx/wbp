@@ -64,9 +64,13 @@ async function readTable(p) {
 async function searchImages(cfg, tags, title) {
   const keys = cfg.keys || (cfg.key ? [cfg.key] : []); if (!keys.length) { log('warn', '  ⚠ 未配置 images.keys'); return []; }
   const key = keys[Math.floor(Math.random() * keys.length)];
-  const { gl = 'pl', hl = 'pl', tbs = 'qdr:w' } = cfg;
-  const keep = (tags || []).filter(t => t.length > 2 && !/^\d+\s*(in|pack|pcs|set|pairs?|stk|ctn|box|bag|roll|sheets?|ml|g|kg|cm|mm|inch)/i.test(t));
-  const q = [...keep, title].filter(Boolean).join(' ').slice(0, 100);
+  const { gl = 'pl', hl = 'pl', tbs = 'qdr:w', query } = cfg;
+  let q;
+  if (query) { q = String(query).slice(0, 100); }
+  else {
+    const keep = (tags || []).filter(t => t.length > 2 && !/^\d+\s*(in|pack|pcs|set|pairs?|stk|ctn|box|bag|roll|sheets?|ml|g|kg|cm|mm|inch)/i.test(t));
+    q = [...keep, title].filter(Boolean).join(' ').slice(0, 100);
+  }
   const res = await fetchWithRetry('https://google.serper.dev/images', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q, gl, hl, tbs }) });
   if (!res.ok) { log('warn', `  图片搜索失败: ${res.status}`); return []; }
   let data; try { data = await res.json(); } catch { log('warn', '  图片搜索响应解析失败'); return []; }
@@ -310,7 +314,7 @@ extensions = []  # 可选
 #gl = "pl"                # 国家代码，默认 pl（波兰）
 #hl = "pl"                # 语言代码，默认 pl
 #tbs = "qdr:w"            # 时间范围，默认过去一周
-#query = ""               # 可选，默认使用文章标题
+#query = "固定搜索词"           # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
 `;
 
 // ── 首次运行自动初始化（不依赖 xlsx，仅用 Node 标准库）──

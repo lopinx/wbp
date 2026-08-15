@@ -297,6 +297,9 @@ ok(src.includes('paras.length - 1'), 'mixImages 截断图片到段落数-1');
 ok(src.includes("paras[i].end"), 'mixImages 基于段落位置插入');
 ok(src.includes('</h3>'), 'mixImages 检测小标题避开');
 ok(src.includes('paras.length < 2'), 'mixImages 少于2段落不插入');
+// searchImages 支持 query 字段覆盖默认搜索词（tags+title）
+ok(src.includes('const { gl = \'pl\', hl = \'pl\', tbs = \'qdr:w\', query } = cfg'), 'searchImages 解构 query 字段');
+ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
 // 文件名清理支持拉丁扩展补充区（波兰语带附加符号字符）
 ok(src.includes('\\u0100-\\u017F'), '文件名清理保留波兰语带附加符号字符');
 ok(src.includes('\\u4e00-\\u9fff'), '文件名清理保留中日韩字符');
