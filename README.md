@@ -4,7 +4,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-195%2F195%20passing-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-196%2F196%20passing-brightgreen)](#)
 
 ---
 
@@ -57,7 +57,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (195/195 通过)
+npm test           # 运行自检测试套件 (196/196 通过)
 ```
 
 ---
@@ -174,7 +174,7 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # 核心单文件（所有逻辑，含 initConfig 首次运行初始化）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (195/195 通过)
+│               └── selftest.mjs       # 自检测试 (196/196 通过)
 ```
 
 **运行时生成**：
@@ -518,7 +518,7 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 
 ```
 skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，含 initConfig 首次运行初始化）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (195/195 通过)
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (196/196 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```

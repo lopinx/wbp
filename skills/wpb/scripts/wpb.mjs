@@ -137,7 +137,7 @@ async function uploadImage(site, imgUrl) {
   let raw; try { raw = decodeURIComponent(imgUrl.split('?')[0].split('/').pop() || 'image.jpg'); } catch { raw = imgUrl.split('?')[0].split('/').pop() || 'image.jpg'; }
   const ext = '.' + ((raw.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i) || [])[1] || 'jpg');
   const name = (raw.replace(/\.(jpg|jpeg|png|gif|webp|avif)$/i, '') || 'image').replace(/[^\w\u0100-\u017F\u4e00-\u9fff.-]/g, '-').slice(0, 60) + ext;
-  const boundary = '----' + Math.random().toString(36).slice(2), ctype = res.headers.get('content-type') || 'image/jpeg';
+  const boundary = '----' + Math.random().toString(36).slice(2); let ctype = res.headers.get('content-type') || 'image/jpeg'; if (!/^image\//i.test(ctype)) ctype = 'image/jpeg';
   const r = await fetchWithRetry(`${site.url.replace(/\/+$/, '')}/media`, { method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'Authorization': wpAuth(site), 'Content-Type': `multipart/form-data; boundary=${boundary}` }, body: Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${ctype}\r\n\r\n`), buf, Buffer.from(`\r\n--${boundary}--\r\n`)] ) });
   if (!r.ok) { log('error', `媒体上传失败: ${r.status}`); throw new Error(`媒体上传失败: ${r.status}`); }
   const j = await r.json(); if (!j?.source_url) throw new Error('媒体上传返回缺少 source_url'); return j.source_url;

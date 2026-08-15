@@ -327,6 +327,8 @@ ok(/opts\?\.signal \|\| AbortSignal\.timeout/.test(src), 'fetchWithRetry signal 
 ok(/await fetchWithRetry\(`\$\{site\.url/.test(src), 'uploadImage 走 fetchWithRetry 重试');
 // uploadImage decodeURIComponent 回退（非法 % 序列时用原始文件名而非 image.jpg）
 ok(/catch \{ raw = imgUrl\.split/.test(src), 'uploadImage decodeURI 失败时回退原始文件名');
+// uploadImage content-type 校验（非图片类型回退为 image/jpeg）
+ok(src.includes("!/^image\\//i.test(ctype)"), 'uploadImage 非图片 content-type 回退为 image/jpeg');
 // generatePromptContent 为不同工具注入 invoke 前缀
 ok(src.includes('tool?.invoke'), 'generatePromptContent 注入 invoke 前缀');
 // mixImages 截断图片到可用位置数（不丢图）
