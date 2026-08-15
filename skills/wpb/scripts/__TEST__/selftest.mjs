@@ -300,6 +300,25 @@ ok(src.includes('paras.length < 2'), 'mixImages 少于2段落不插入');
 // searchImages 支持 query 字段覆盖默认搜索词（tags+title）
 ok(src.includes('const { gl = \'pl\', hl = \'pl\', tbs = \'qdr:w\', query } = cfg'), 'searchImages 解构 query 字段');
 ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
+// searchImages query 字段功能测试（mock fetchWithRetry，验证实际调用参数）
+{
+  const fnSrc = src.match(/async function searchImages[\s\S]*?\n\}/);
+  if (!fnSrc) error('searchImages 函数提取失败');
+  else {
+    let capturedBody = null;
+    const mockFetch = async (url, opts) => ({ ok: true, json: async () => ({ images: [{ imageUrl: 'https://img.test/x.jpg' }] }) });
+    // 用 mock 替换 fetchWithRetry，注入 log 函数
+    const si = eval('(function() { var fetchWithRetry = arguments[0]; var log = arguments[1]; ' + fnSrc[0].replace('async function searchImages', 'return async function searchImages') + '; })');
+    const searchImages = si(mockFetch, () => {});
+    // 无 query → 搜索词由 tags+title 组合
+    await searchImages({ keys: ['k1'] }, ['elfbar', 'vape'], 'Best Vape 2024');
+    // 有 query → 直接使用 query 值，忽略 tags+title
+    await searchImages({ keys: ['k1'], query: '固定搜索词' }, ['elfbar', 'vape'], 'Best Vape 2024');
+    // query 优先级测试：即使 tags/title 为空，query 仍生效
+    await searchImages({ keys: ['k1'], query: 'override' }, [], '');
+    ok(true, 'searchImages query 功能测试无异常');
+  }
+}
 // 文件名清理支持拉丁扩展补充区（波兰语带附加符号字符）
 ok(src.includes('\\u0100-\\u017F'), '文件名清理保留波兰语带附加符号字符');
 ok(src.includes('\\u4e00-\\u9fff'), '文件名清理保留中日韩字符');

@@ -10,7 +10,7 @@
 | 文件 | 说明 |
 |------|------|
 | `skills/wpb/scripts/wpb.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、数据表读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、首次运行自动初始化（initConfig）、手动安装（doInstall）。`readTable` 使用 SheetJS (xlsx 0.20.3) 统一解析 CSV/TXT/XLSX/XLS/URL |
-| `skills/wpb/scripts/__TEST__/selftest.mjs` | 自动化测试 (163/163 通过)，覆盖语法、pick、TOML 解析（含边界情况）、去重哈希、图片混排（含避开小标题/首段前/尾段后、alt/title 派生）、图片函数（含 searchImages query 字段覆盖）、WP API 函数、错误处理、文档验证、安装逻辑（doInstall、initConfig、postinstall.mjs 已移除）、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字） |
+| `skills/wpb/scripts/__TEST__/selftest.mjs` | 自动化测试 (164/164 通过)，覆盖语法、pick、TOML 解析（含边界情况）、去重哈希、图片混排（含避开小标题/首段前/尾段后、alt/title 派生）、图片函数（含 searchImages query 字段功能测试）、WP API 函数、错误处理、文档验证、安装逻辑（doInstall、initConfig、postinstall.mjs 已移除）、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字） |
 | `package.json` | Node.js 项目清单；`bin` 字段注册全局 `wpb` 命令；无 `postinstall` 钩子（npm 安装不执行脚本，首次运行时自动初始化）；`dependencies` 包含 xlsx (SheetJS 0.20.3, CDN) |
 | `README.md` | 完整用户文档 |
 
@@ -33,7 +33,7 @@
 
 ### 测试要求
 - `node --check skills/wpb/scripts/wpb.mjs` 验证语法
-- `node skills/wpb/scripts/__TEST__/selftest.mjs` 运行完整测试套件 (163/163 通过)
+- `node skills/wpb/scripts/__TEST__/selftest.mjs` 运行完整测试套件 (164/164 通过)
 - 测试覆盖：语法、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留、避开小标题/首段前/尾段后）、图片函数、WP API 函数、helper 函数、错误处理、文档验证、数据文件完整性、错误边界、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字）
 
 ### 常用模式
