@@ -126,7 +126,8 @@ async function wpFetch(site, path, opts = {}) {
   if (!process.env.WP_PASSWORD && !_wpPwWarned) { log('warn', 'WP_PASSWORD 环境变量未设置，使用 TOML 配置（不安全）'); _wpPwWarned = true; }
   const res = await fetchWithRetry(site.url.replace(/\/+$/, '') + '/' + path.replace(/^\//, ''), { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'Authorization': wpAuth(site), 'Content-Type': 'application/json', ...opts.headers } });
   if (!res.ok) { log('error', `WP API 错误: ${res.status} ${res.statusText}`); throw new Error(`WP API ${res.status}: ${res.statusText}`); }
-  return res.json();
+  let data; try { data = await res.json(); } catch (e) { throw new Error(`WP API 响应 JSON 解析失败 (${path}): ${e.message}`); }
+  return data;
 }
 
 async function uploadImage(site, imgUrl) {
@@ -154,7 +155,7 @@ const categoryCache = new Map(), tagCache = new Map();
 async function findOrCreate(site, type, name, cache) {
   const key = `${site.url}:${name}`; if (cache.has(key)) return cache.get(key);
   let items = [], page = 1;
-  while (true) { const batch = await wpFetch(site, `${type}?per_page=100&page=${page}`); items = items.concat(batch); if (batch.length < 100) break; page++; }
+  while (page <= 20) { const batch = await wpFetch(site, `${type}?per_page=100&page=${page}`); if (!Array.isArray(batch)) break; items = items.concat(batch); if (batch.length < 100) break; page++; }
   let item = items.find(i => i.name === name || i.slug === name);
   if (!item) { try { item = await wpFetch(site, type, { method: 'POST', body: JSON.stringify({ name, slug: name.toLowerCase().replace(/\s+/g, '-') }) }); } catch (e) { if (e.message?.includes('already exists') || e.message?.includes('term_exists')) { const existing = await wpFetch(site, `${type}?search=${encodeURIComponent(name)}`); item = existing.find(i => i.name === name || i.slug === name); if (!item) throw e; } else throw e; } }
   cache.set(key, item.id); return item.id;

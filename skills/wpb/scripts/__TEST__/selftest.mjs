@@ -371,6 +371,13 @@ ok(src.includes('async function uploadImage'), 'uploadImage 已定义');
 ok(src.includes('async function uploadExternalImages'), 'uploadExternalImages 已定义');
 ok(src.includes('async function findOrCreate'), 'findOrCreate 已定义');
 ok(src.includes('async function checkDuplicate'), 'checkDuplicate 已定义');
+// wpFetch JSON 解析错误处理（非 JSON 响应时给出明确错误）
+ok(src.includes('WP API 响应 JSON 解析失败'), 'wpFetch 包含 JSON 解析错误处理');
+// findOrCreate 分页上限防护（防止非数组响应导致死循环）
+ok(/page <= 20/.test(src), 'findOrCreate 分页上限 20 页');
+ok(src.includes('Array.isArray(batch)'), 'findOrCreate 非数组响应时 break');
+// checkDuplicate 标题截断保护（防超长标题导致 WP 搜索异常）
+ok(src.includes('title.slice(0, 100)'), 'checkDuplicate 标题截断至 100 字符');
 
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
 console.log('\n## 11. 安装逻辑');
