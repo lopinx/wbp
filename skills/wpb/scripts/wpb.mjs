@@ -218,7 +218,11 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const issues = [], warnings = [];
   const body = content || excerpt || '';
   const text = body.replace(/<[^>]+>/g, '');
-  const wordCount = text.split(/[\s]+/).filter(Boolean).length;
+  // 词数统计：对 CJK 文本（中日韩）按字符计数，对拉丁文本按空格分词
+  const cjkChars = (text.match(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g) || []).length;
+  const nonCjkText = text.replace(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g, ' ');
+  const nonCjkWords = nonCjkText.split(/[\s]+/).filter(Boolean).length;
+  const wordCount = cjkChars + nonCjkWords;
   const paras = body.match(PARA_RE) || [];
   const h3 = body.match(/<h3[^>]*>/g) || [];
   const checks = [[wordCount < 5000, `词数 ${wordCount} 少于 5000`], [paras.length < 10, `仅有 ${paras.length} 个段落`], [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`], [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`], [!excerpt || excerpt.length < 50, `摘要过短 (${excerpt?.length || 0} 字符)`], [!tags || tags.length < 3, `仅有 ${tags?.length || 0} 个标签`], [tags && tags.length > 10, `标签过多 (${tags.length} 个)`]];
@@ -271,11 +275,7 @@ async function doInstall() {
   console.log('=== 全局命令 ==='); console.log('✓ wpb 命令已通过 npm 全局安装自动注册'); console.log('  升级方式：npm update -g @lopinx/wpb');
 
   if (existsSync(DATA_SRC)) { const REF_FILES = ['keywords.csv', 'products.csv', 'prompts.md']; const REF_DIRS = ['extensions']; const cp = (src, dst) => { if (!existsSync(dst)) mkdirSync(dst, { recursive: true }); for (const f of readdirSync(src)) { const s = join(src, f), d = join(dst, f); if (statSync(s).isDirectory()) { if (REF_DIRS.includes(f)) cp(s, d); } else if (REF_FILES.includes(f) || !existsSync(d)) writeFileSync(d, readFileSync(s)); } }; cp(DATA_SRC, DATA_DST); console.log('数据文件已复制到', DATA_DST); } else console.warn('⚠ 未找到数据源目录:', DATA_SRC); for (const d of [join(WP_DIR, 'data'), join(WP_DIR, 'data', 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
-
-  const promptsPath = join(WP_DIR, 'data', 'prompts.md'); if (!existsSync(promptsPath)) writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
-  const knowledgePath = join(WP_DIR, 'data', 'extensions', 'knowledge.md'); if (!existsSync(knowledgePath)) writeFileSync(knowledgePath, `# 领域知识\n\n## 行业术语\n- 保持专业度\n- 解释生僻术语\n\n## 注意事项\n- 避免过度营销\n- 引用来源\n`, 'utf-8');
-  const keywordsPath = join(WP_DIR, 'data', 'keywords.csv'); if (!existsSync(keywordsPath)) writeFileSync(keywordsPath, '\uFEFF' + ['keyword', '人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全'].map(r => r.includes(',') ? `"${r}"` : r).join('\n') + '\n', 'utf-8');
-  const productsPath = join(WP_DIR, 'data', 'products.csv'); if (!existsSync(productsPath)) writeFileSync(productsPath, '\uFEFF' + [['name', 'price', 'desc'], ['产品A', '99', '基础版'], ['产品B', '199', '高级版']].map(r => r.map(f => f.includes(',') ? `"${f}"` : f).join(',')).join('\n') + '\n', 'utf-8');
+  ensureDefaultData(join(WP_DIR, 'data'));
 
   if (existsSync(CFG)) { log('info', '配置文件已存在，跳过生成:', CFG); } else { writeFileSync(CFG, DEFAULT_CFG, 'utf-8'); console.log(`配置文件已生成: ${CFG}（请编辑后使用）`); }
 
@@ -329,6 +329,18 @@ extensions = []  # 可选
 #query = "固定搜索词"           # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
 `;
 
+// 兜底生成缺失的默认数据文件（doInstall 和 initConfig 共用）
+function ensureDefaultData(dataDir) {
+  const promptsPath = join(dataDir, 'prompts.md');
+  if (!existsSync(promptsPath)) writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
+  const knowledgePath = join(dataDir, 'extensions', 'knowledge.md');
+  if (!existsSync(knowledgePath)) writeFileSync(knowledgePath, `# 领域知识\n\n## 行业术语\n- 保持专业度\n- 解释生僻术语\n\n## 注意事项\n- 避免过度营销\n- 引用来源\n`, 'utf-8');
+  const keywordsPath = join(dataDir, 'keywords.csv');
+  if (!existsSync(keywordsPath)) writeFileSync(keywordsPath, '\uFEFF' + ['keyword', '人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全'].map(r => r.includes(',') ? `"${r}"` : r).join('\n') + '\n', 'utf-8');
+  const productsPath = join(dataDir, 'products.csv');
+  if (!existsSync(productsPath)) writeFileSync(productsPath, '\uFEFF' + [['name', 'price', 'desc'], ['产品A', '99', '基础版'], ['产品B', '199', '高级版']].map(r => r.map(f => f.includes(',') ? `"${f}"` : f).join(',')).join('\n') + '\n', 'utf-8');
+}
+
 // ── 首次运行自动初始化（不依赖 xlsx，仅用 Node 标准库）──
 function initConfig() {
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
@@ -347,14 +359,7 @@ function initConfig() {
   }
   for (const d of [DATA_DST, join(DATA_DST, 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
   // 兜底生成缺失的默认数据文件
-  const promptsPath = join(DATA_DST, 'prompts.md');
-  if (!existsSync(promptsPath)) writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
-  const knowledgePath = join(DATA_DST, 'extensions', 'knowledge.md');
-  if (!existsSync(knowledgePath)) writeFileSync(knowledgePath, `# 领域知识\n\n## 行业术语\n- 保持专业度\n- 解释生僻术语\n\n## 注意事项\n- 避免过度营销\n- 引用来源\n`, 'utf-8');
-  const keywordsPath = join(DATA_DST, 'keywords.csv');
-  if (!existsSync(keywordsPath)) writeFileSync(keywordsPath, '\uFEFF' + ['keyword', '人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全'].map(r => r.includes(',') ? `"${r}"` : r).join('\n') + '\n', 'utf-8');
-  const productsPath = join(DATA_DST, 'products.csv');
-  if (!existsSync(productsPath)) writeFileSync(productsPath, '\uFEFF' + [['name', 'price', 'desc'], ['产品A', '99', '基础版'], ['产品B', '199', '高级版']].map(r => r.map(f => f.includes(',') ? `"${f}"` : f).join(',')).join('\n') + '\n', 'utf-8');
+  ensureDefaultData(DATA_DST);
   // 生成 setting.toml
   writeFileSync(CFG, DEFAULT_CFG, 'utf-8');
   console.log(`[wpb] 配置文件已生成: ${CFG}`);

@@ -282,6 +282,10 @@ ok(qcFn && qcFn[0].includes('return'), 'checkQuality 函数体完整（含 retur
 // 词数校验阈值为 5000
 ok(src.includes('wordCount < 5000'), '词数校验阈值为 5000');
 ok(src.includes('少于 5000'), '词数不足提示 5000');
+// CJK 词数统计：按字符计数而非空格分词
+ok(src.includes('cjkChars'), 'checkQuality 支持 CJK 字符计数');
+ok(src.includes('\\u4e00-\\u9fff'), 'CJK 范围包含中日韩统一表意文字');
+ok(src.includes('\\uac00-\\ud7af'), 'CJK 范围包含韩文音节');
 // 段落数校验阈值为 10
 ok(src.includes('paras.length < 10'), '段落数校验阈值为 10');
 // H3 标题校验阈值为 3
@@ -418,6 +422,7 @@ ok(src.includes('checkCLI'), '安装逻辑包含 CLI 检测');
 ok(src.includes('detectedTools'), '安装逻辑包含工具跟踪');
 ok(src.includes('npm update -g'), '安装逻辑包含 npm 全局安装升级提示');
 ok(src.includes('function initConfig'), 'wpb.mjs 包含 initConfig 首次运行初始化函数');
+ok(src.includes('function ensureDefaultData'), 'ensureDefaultData 公共函数已提取');
 ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wpb.mjs）');
 ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（改为运行时 initConfig）');
 const PKG = readFileSync(join(SCRIPT_DIR, '../../..', 'package.json'), 'utf-8');
