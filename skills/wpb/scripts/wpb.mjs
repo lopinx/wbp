@@ -160,7 +160,7 @@ async function findOrCreate(site, type, name, cache) {
   let items = [], page = 1;
   while (page <= 20) { const batch = await wpFetch(site, `${type}?per_page=100&page=${page}`); if (!Array.isArray(batch)) break; items = items.concat(batch); if (batch.length < 100) break; page++; }
   let item = items.find(i => i.name === name || i.slug === name);
-  if (!item) { try { item = await wpFetch(site, type, { method: 'POST', body: JSON.stringify({ name, slug: name.toLowerCase().replace(/\s+/g, '-') }) }); } catch (e) { if (e.message?.includes('already exists') || e.message?.includes('term_exists')) { const existing = await wpFetch(site, `${type}?search=${encodeURIComponent(name)}`); item = existing.find(i => i.name === name || i.slug === name); if (!item) throw e; } else throw e; } }
+  if (!item) { try { item = await wpFetch(site, type, { method: 'POST', body: JSON.stringify({ name, slug: name.toLowerCase().replace(/\s+/g, '-') }) }); } catch (e) { if (e.message?.includes('already exists') || e.message?.includes('term_exists')) { const existing = await wpFetch(site, `${type}?search=${encodeURIComponent(name)}&per_page=100`); if (!Array.isArray(existing)) throw new Error(`搜索 ${type} 返回非数组: ${JSON.stringify(existing)}`); item = existing.find(i => i.name === name || i.slug === name); if (!item) throw e; } else throw e; } }
   cache.set(key, item.id); return item.id;
 }
 
@@ -383,7 +383,7 @@ async function main() {
   if (!siteNames.length) die('未配置任何站点');
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; if (!site.name) site.name = siteName;
   // 站点必填字段校验，提前给出明确错误而非在后续 API 调用中抛晦涩 TypeError
-  for (const f of ['url', 'user', 'pass']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
+  for (const f of ['url', 'user', 'pass', 'categories']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
   if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPath = safePath(site.products), promptPath = safePath(site.prompts), extPaths = (site.extensions || []).map(p => safePath(p));
   // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync

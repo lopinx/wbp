@@ -620,7 +620,7 @@ XLSX.utils.book_append_sheet(wb2, ws2, 'Sheet1');
 const xlsxBuf2 = XLSX.write(wb2, { type: 'buffer', bookType: 'xlsx' });
 writeFileSync(join(_td, 'real.xlsx'), xlsxBuf2);
 
-const xlsxCfg = `site.x.url = "https://x.com"\nsite.x.user = "u"\nsite.x.pass = "p p p p p p p p"\nsite.x.keywords = ["${join(_td, 'real.xlsx').replace(/\\/g, '/')}"]\nsite.x.products = ""\nsite.x.prompts = ""`;
+const xlsxCfg = `site.x.url = "https://x.com"\nsite.x.user = "u"\nsite.x.pass = "p p p p p p p p"\nsite.x.categories = [1]\nsite.x.keywords = ["${join(_td, 'real.xlsx').replace(/\\/g, '/')}"]\nsite.x.products = ""\nsite.x.prompts = ""`;
 writeFileSync(cfgPath, xlsxCfg, 'utf-8');
 const xlsxRes = run('wpb.mjs', ['pick']);
 ok(xlsxRes.status === 0, 'readTable 对 xlsx 退出码为 0');
