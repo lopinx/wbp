@@ -469,6 +469,30 @@ try {
   writeFileSync(cfgPath, cfgBackup, 'utf-8');
 }
 
+// 站点缺少必填字段（url/user/pass）
+try {
+  writeFileSync(cfgPath, '[site.nofield]\nname = "test"\nkeywords = ["data/keywords.csv"]\n', 'utf-8');
+  const noField = run('wpb.mjs', ['pick']);
+  ok(noField.status !== 0, '缺少必填字段退出码非零');
+  const noFieldOut = noField.stderr + noField.stdout;
+  ok(noFieldOut.includes('缺少必填字段'), '缺少必填字段错误提示');
+} finally {
+  writeFileSync(cfgPath, cfgBackup, 'utf-8');
+}
+
+// 草稿 JSON 格式错误
+try {
+  const badDraftPath = join(WP_DIR, 'bad_draft.json');
+  writeFileSync(badDraftPath, '{invalid json!!!', 'utf-8');
+  const badDraft = run('wpb.mjs', ['publish', badDraftPath]);
+  ok(badDraft.status !== 0, 'JSON 格式错误退出码非零');
+  const badDraftOut = badDraft.stderr + badDraft.stdout;
+  ok(badDraftOut.includes('JSON 解析失败'), 'JSON 格式错误提示清晰');
+  unlinkSync(badDraftPath);
+} finally {
+  writeFileSync(cfgPath, cfgBackup, 'utf-8');
+}
+
 // readTable 对 xlsx 成功解析
 console.log('\n  XLSX 成功解析测试');
 const xlsxData2 = [['keyword'], ['测试关键词1'], ['测试关键词2']];

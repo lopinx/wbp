@@ -119,8 +119,9 @@ async function s3List(cfg, limit) {
 }
 
 // ── WP REST API ──
+let _wpPwWarned = false;
 async function wpFetch(site, path, opts = {}) {
-  if (!process.env.WP_PASSWORD) log('warn', 'WP_PASSWORD 环境变量未设置，使用 TOML 配置（不安全）');
+  if (!process.env.WP_PASSWORD && !_wpPwWarned) { log('warn', 'WP_PASSWORD 环境变量未设置，使用 TOML 配置（不安全）'); _wpPwWarned = true; }
   const res = await fetchWithRetry(site.url.replace(/\/+$/, '') + '/' + path.replace(/^\//, ''), { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'Authorization': wpAuth(site), 'Content-Type': 'application/json', ...opts.headers } });
   if (!res.ok) { log('error', `WP API 错误: ${res.status} ${res.statusText}`); throw new Error(`WP API ${res.status}: ${res.statusText}`); }
   return res.json();
@@ -362,6 +363,9 @@ async function main() {
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
   if (!siteNames.length) die('未配置任何站点');
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; site.name = siteName;
+  // 站点必填字段校验，提前给出明确错误而非在后续 API 调用中抛晦涩 TypeError
+  for (const f of ['url', 'user', 'pass']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
+  if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPath = safePath(site.products), promptPath = safePath(site.prompts), extPaths = (site.extensions || []).map(p => safePath(p));
   if (!kwPaths.length || !kwPaths.some(existsSync)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = (await Promise.all(kwPaths.filter(existsSync).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
@@ -377,7 +381,7 @@ async function main() {
   const draftPath = process.argv[3];
   if (!draftPath) die('用法: wpb publish <草稿文件路径>');
   if (!existsSync(draftPath)) die('草稿文件不存在: ' + draftPath);
-  const draft = JSON.parse(readFileSync(draftPath, 'utf-8'));
+  let draft; try { draft = JSON.parse(readFileSync(draftPath, 'utf-8')); } catch (e) { die(`草稿文件 JSON 解析失败: ${e.message}\n文件: ${draftPath}`); }
   const v = validateDraft(draft); if (!v.valid) die('草稿验证失败: ' + v.errors.join('; '));
   const dup = await checkDuplicate(site, draft.title); if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
   const q = await checkQuality(draft.title, draft.content, draft.excerpt, draft.tags || [], site); if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; ')); if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
