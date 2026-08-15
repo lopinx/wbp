@@ -415,6 +415,28 @@ ok(/siteOrigin && url\.startsWith\(siteOrigin\)/.test(src), 'uploadExternalImage
 // checkQuality 关键词正则转义防护（用户标签含正则元字符时不注入）
 ok(src.includes('k.replace(/[.'), 'checkQuality 关键词正则转义防护');
 
+// ── 10. URL 关键词文件支持与路径安全 ──
+console.log('\n## 10. URL 关键词文件与路径安全');
+// safePath 对 URL 原样返回（不解析为本地伪路径）
+ok(src.includes('if (isUrl(p)) return p'), 'safePath 对 URL 原样返回');
+// isUrl 辅助函数已定义
+ok(src.includes('const isUrl = p =>'), 'isUrl 辅助函数已定义');
+// pathOk 统一路径可用性判断（URL 视为可用，本地文件须 existsSync）
+ok(src.includes('const pathOk = p =>'), 'pathOk 统一路径可用性判断');
+ok(src.includes('isUrl(p) || existsSync(p)'), 'pathOk URL 始终视为可用');
+// main 函数使用 pathOk 替代 existsSync 检查关键词文件
+ok(src.includes('kwPaths.some(pathOk)'), 'main 使用 pathOk 检查关键词文件');
+ok(src.includes('kwPaths.filter(pathOk)'), 'main 使用 pathOk 过滤关键词文件');
+// products/prompts/extensions 也使用 pathOk
+ok(src.includes('pathOk(prodPath)'), 'products 使用 pathOk 检查');
+ok(src.includes('pathOk(promptPath)'), 'prompts 使用 pathOk 检查');
+ok(src.includes('pathOk(ep)'), 'extensions 使用 pathOk 检查');
+// checkQuality 死链检测使用 extHref 而非 allLinks（只检查外链）
+ok(src.includes('extHref.slice(0, 3)'), '死链检测取外链前 3 个（非所有链接）');
+ok(src.includes('if (extHref.length)'), '死链检测仅在有外链时执行');
+// site.name 仅在未配置时回退为 section slug（不覆盖用户显式配置）
+ok(src.includes('if (!site.name) site.name = siteName'), 'site.name 仅在未配置时回退为 slug');
+
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
 console.log('\n## 11. 安装逻辑');
 ok(src.includes('async function doInstall'), 'wpb.mjs 包含 doInstall 安装函数');

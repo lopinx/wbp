@@ -210,7 +210,7 @@ wpb/
 
 [site.myblog]
 # ── 站点基本信息（必填）──
-name       = "My Blog"                                      # 站点展示名称（内部用）
+name       = "My Blog"                                      # 站点展示名称（可选，留空则用 [site.<slug>] 的 slug 名称）
 url        = "https://example.com/wp-json/wp/v2"            # WordPress REST API 地址
 user       = "admin"                                        # WordPress 用户名
 pass       = "xxxx xxxx xxxx xxxx"                          # WP Application Password（至少10位）
@@ -253,7 +253,7 @@ query      = ""                                             # 固定搜索词（
 
 | 配置项 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| `name` | string | ✅ | 站点展示名称（内部标识，不影响发布） |
+| `name` | string | ❌ | 站点展示名称（可选，留空则用 `[site.<slug>]` 的 slug 名称，仅用于 `pick` 输出标识） |
 | `url` | string | ✅ | WordPress REST API 完整地址，必须以 `/wp-json/wp/v2` 结尾 |
 | `user` | string | ✅ | WordPress 登录用户名 |
 | `pass` | string | ✅ | WP Application Password（WordPress → 用户 → 应用程序密码，至少10位） |

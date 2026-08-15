@@ -26,7 +26,9 @@ const die = (msg, code = 1) => { writeSync(2, String(msg) + '\n'); process.exit(
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
 const asArray = x => Array.isArray(x) ? x : [x];
 const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
-const safePath = p => { if (!p) return null; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 ~/.wpb: ${p} (解析为 ${a})`); return a; };
+const isUrl = p => /^https?:\/\//i.test(p);
+// 安全路径：URL 原样返回（由 readTable 远程获取）；绝对路径原样 resolve；相对路径解析到 ~/.wpb 并防越界
+const safePath = p => { if (!p) return null; if (isUrl(p)) return p; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 ~/.wpb: ${p} (解析为 ${a})`); return a; };
 function isValidKey(k) { return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k); }
 const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); return { valid: e.length === 0, errors: e }; };
 
@@ -247,8 +249,8 @@ async function checkQuality(title, content, excerpt, tags, site) {
   }
   const extHref = allLinks.filter(u => !siteOrigin || !u.startsWith(siteOrigin));
   if (!extHref.length) warnings.push('E-E-A-T 信号不足 (无外部权威外链，建议引用权威来源链接)');
-  if (allLinks.length) {
-    const codes = await Promise.all(allLinks.slice(0, 3).map(u => fetch(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }).then(r => r.status).catch(() => null)));
+  if (extHref.length) {
+    const codes = await Promise.all(extHref.slice(0, 3).map(u => fetch(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }).then(r => r.status).catch(() => null)));
     const dead = codes.filter(c => c !== null && c >= 400 && c < 500).length;
     if (dead) issues.push(`失效链接: ${dead} 个`);
   }
@@ -378,17 +380,19 @@ async function main() {
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
   if (!siteNames.length) die('未配置任何站点');
-  const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; site.name = siteName;
+  const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; if (!site.name) site.name = siteName;
   // 站点必填字段校验，提前给出明确错误而非在后续 API 调用中抛晦涩 TypeError
   for (const f of ['url', 'user', 'pass']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
   if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPath = safePath(site.products), promptPath = safePath(site.prompts), extPaths = (site.extensions || []).map(p => safePath(p));
-  if (!kwPaths.length || !kwPaths.some(existsSync)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
-  const keywords = (await Promise.all(kwPaths.filter(existsSync).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
+  // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync
+  const pathOk = p => p && (isUrl(p) || existsSync(p));
+  if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
+  const keywords = (await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  let products = []; if (prodPath && existsSync(prodPath)) products = await readTable(prodPath);
-  let promptDoc = ''; if (promptPath && existsSync(promptPath)) promptDoc = readFileSync(promptPath, 'utf-8').slice(0, 3000);
-  let extDocs = ''; for (const ep of extPaths) if (existsSync(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`;
+  let products = []; if (prodPath && pathOk(prodPath)) products = await readTable(prodPath);
+  let promptDoc = ''; if (promptPath && pathOk(promptPath)) promptDoc = readFileSync(promptPath, 'utf-8').slice(0, 3000);
+  let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${readFileSync(ep, 'utf-8').slice(0, 2000)}`;
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
   if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: siteName, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }
