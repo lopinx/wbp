@@ -57,7 +57,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (221/221 通过)
+npm test           # 运行自检测试套件 (223/223 通过)
 ```
 
 ---
@@ -174,7 +174,7 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # 核心单文件（所有逻辑，含 initConfig 首次运行初始化）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (221/221 通过)
+│               └── selftest.mjs       # 自检测试 (223/223 通过)
 ```
 
 **运行时生成**：
@@ -216,8 +216,8 @@ user       = "admin"                                        # WordPress 用户�
 pass       = "xxxx xxxx xxxx xxxx"                          # WP Application Password（至少10位）
 categories = [1, "news", "vape"]                            # 发布分类（数字ID 或 名称字符串，多个用逗号）
 keywords   = ["data/keywords.csv"]                          # 关键词文件（可多个，随机合并选取）
-products   = "data/products.csv"                            # 产品信息文件（可选，用于内容补充）
-prompts    = "data/prompts.md"                              # 写作指令文件（可选，Markdown）
+products   = "data/products.csv"                            # 产品信息文件（可选，可多个，随机选一个）
+prompts    = "data/prompts.md"                              # 写作指令文件（可选，Markdown，可多个，随机选一个）
 extensions = ["data/extensions/wiedza.md"]                  # 扩展知识文件（可选，可多个）
 
 # ── 图片处理模式（四选一，见下方详细说明）──
@@ -259,8 +259,8 @@ query      = ""                                             # 固定搜索词（
 | `pass` | string | ✅ | WP Application Password（WordPress → 用户 → 应用程序密码，至少10位） |
 | `categories` | array | ✅ | 发布分类列表，支持数字 ID 或名称字符串，多个用逗号分隔。例：`[1, "news", "vape"]` |
 | `keywords` | array | ✅ | 关键词文件路径，支持 CSV/TXT/XLSX/XLS/URL，可配置多个（工具随机合并后选取） |
-| `products` | string | ❌ | 产品信息文件路径（CSV/TXT/XLSX），用于文章内容补充 |
-| `prompts` | string | ❌ | 写作指令文件路径（Markdown），定义文章风格和结构要求 |
+| `products` | string/array | ❌ | 产品信息文件路径（CSV/TXT/XLSX），用于文章内容补充，可配置多个（随机选一个） |
+| `prompts` | string/array | ❌ | 写作指令文件路径（Markdown），定义文章风格和结构要求，可配置多个（随机选一个） |
 | `extensions` | array | ❌ | 扩展知识文件路径（可多个），为 AI 提供额外背景知识 |
 
 #### 图片处理配置
@@ -337,7 +337,11 @@ wpb 使用 [SheetJS](https://sheetjs.com/) (xlsx 0.20.3) 统一解析所有表�
 
 **产品文件**（`products`）：
 - 首行为表头，所有列都会输出到 `pick` 结果供 AI 参考
-- 单文件
+- 支持配置多个文件（CSV/TXT/XLSX/URL），工具随机选一个文件读取
+
+**写作指令文件**（`prompts`）：
+- Markdown 格式，定义文章风格和结构要求
+- 支持配置多个文件（本地或 URL），工具随机选一个作为本次写作指令
 
 **配置示例**：
 
@@ -518,7 +522,7 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 
 ```
 skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，含 initConfig 首次运行初始化）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (221/221 通过)
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (223/223 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```
