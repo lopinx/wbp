@@ -302,8 +302,8 @@ user = "admin"
 pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
 categories = [8603, "Disposable Vape"]  # 支持数字ID或名称，多个分类
 keywords = ["data/keywords.xlsx"]  # 可多个，支持 https:// URL（如 Google Sheets）
-products = "data/products.xlsx"  # 可选，支持 https:// URL
-prompts = "data/prompts.md"  # 可选，支持 https:// URL
+products = "data/products.xlsx"  # 可选，支持 https:// URL，可多个（随机选一个）
+prompts = "data/prompts.md"  # 可选，支持 https:// URL，可多个（随机选一个）
 extensions = []  # 可选，支持 https:// URL
 
 # 四种图片模式（选其一）：
@@ -383,14 +383,14 @@ async function main() {
   // 站点必填字段校验，提前给出明确错误而非在后续 API 调用中抛晦涩 TypeError
   for (const f of ['url', 'user', 'pass', 'categories']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
   if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
-  const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPath = safePath(site.products), promptPath = safePath(site.prompts), extPaths = (site.extensions || []).map(p => safePath(p));
+  const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean), promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean), extPaths = (site.extensions || []).map(p => safePath(p));
   // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync
   const pathOk = p => p && (isUrl(p) || existsSync(p));
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = (await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  let products = []; if (prodPath && pathOk(prodPath)) products = await readTable(prodPath);
-  let promptDoc = ''; if (promptPath && pathOk(promptPath)) promptDoc = isUrl(promptPath) ? (await (await fetchWithRetry(promptPath)).text()).slice(0, 3000) : readFileSync(promptPath, 'utf-8').slice(0, 3000);
+  let products = []; { const ok = prodPaths.filter(pathOk); if (ok.length) products = await readTable(ok[Math.floor(Math.random() * ok.length)]); }
+  let promptDoc = ''; { const ok = promptPaths.filter(pathOk); if (ok.length) { const p = ok[Math.floor(Math.random() * ok.length)]; promptDoc = isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); } }
   let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`;
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;

@@ -428,9 +428,12 @@ ok(src.includes('isUrl(p) || existsSync(p)'), 'pathOk URL 始终视为可用');
 ok(src.includes('kwPaths.some(pathOk)'), 'main 使用 pathOk 检查关键词文件');
 ok(src.includes('kwPaths.filter(pathOk)'), 'main 使用 pathOk 过滤关键词文件');
 // products/prompts/extensions 也使用 pathOk
-ok(src.includes('pathOk(prodPath)'), 'products 使用 pathOk 检查');
-ok(src.includes('pathOk(promptPath)'), 'prompts 使用 pathOk 检查');
+ok(src.includes('prodPaths.filter(pathOk)'), 'products 使用 pathOk 检查');
+ok(src.includes('promptPaths.filter(pathOk)'), 'prompts 使用 pathOk 检查');
 ok(src.includes('pathOk(ep)'), 'extensions 使用 pathOk 检查');
+// products/prompts 支持多个文件（随机选一个）
+ok(src.includes('asArray(site.products)'), 'products 支持多文件数组');
+ok(src.includes('asArray(site.prompts)'), 'prompts 支持多文件数组');
 // checkQuality 死链检测使用 extHref 而非 allLinks（只检查外链）
 ok(src.includes('extHref.slice(0, 3)'), '死链检测取外链前 3 个（非所有链接）');
 ok(src.includes('if (extHref.length)'), '死链检测仅在有外链时执行');
@@ -451,7 +454,7 @@ ok(src.includes('fetchWithRetry(u, { method:'), '死链检测使用 fetchWithRet
 // uploadExternalImages img src 正则同时匹配单引号和双引号
 ok(src.includes("src=[\"']([^\"']+)[\"']"), 'uploadExternalImages img src 正则匹配单双引号');
 // prompts/extensions 支持 URL 路径（isUrl 判断后走 fetch 而非 readFileSync）
-ok(src.includes('isUrl(promptPath)'), 'prompts 支持 URL 路径');
+ok(src.includes('promptDoc = isUrl(p)'), 'prompts 支持 URL 路径');
 ok(src.includes('isUrl(ep)'), 'extensions 支持 URL 路径');
 
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
