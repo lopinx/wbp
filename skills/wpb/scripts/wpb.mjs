@@ -369,8 +369,6 @@ function initConfig() {
   console.log(`[wpb] 数据文件已复制到 ${DATA_DST}`);
 }
 
-// 导入 copyFileSync（initConfig 需要）
-
 // ── 主函数 ──
 async function main() {
   const cmd = process.argv[2] || 'pick';
