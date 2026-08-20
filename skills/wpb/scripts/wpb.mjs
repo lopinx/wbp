@@ -197,20 +197,6 @@ async function uploadExternalImages(site, html) {
   return results;
 }
 
-// 并发控制辅助函数：分块并发执行，限制最大并发数
-async function concurrentMap(arr, concurrency, fn) {
-  const results = [];
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += concurrency) {
-    chunks.push(arr.slice(i, i + concurrency));
-  }
-  for (const chunk of chunks) {
-    const chunkResults = await Promise.all(chunk.map((item, idx) => fn(item, idx)));
-    results.push(...chunkResults);
-  }
-  return results;
-}
-
 const categoryCache = new Map(), tagCache = new Map();
 async function findOrCreate(site, type, name, cache) {
   const key = `${site.url}:${name}`; if (cache.has(key)) return cache.get(key);
