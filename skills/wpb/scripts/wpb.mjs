@@ -456,7 +456,12 @@ async function main() {
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
   const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; return readTable(ok[Math.floor(Math.random() * ok.length)]); };
   const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); };
-  const loadExtDocs = async () => { let docs = ''; for (const ep of extPaths) if (pathOk(ep)) docs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`; return docs; };
+  const loadExtDocs = async () => {
+    const ok = extPaths.filter(ep => pathOk(ep)); if (!ok.length) return '';
+    // 并发加载扩展文档，限制并发数避免过多请求；保留 --- <filename> --- 分隔格式
+    const parts = await concurrentMap(ok, 5, async (ep) => `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`);
+    return parts.join('');
+  };
   const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
@@ -469,14 +474,27 @@ async function main() {
   let draft; try { draft = JSON.parse(readFileSync(draftPath, 'utf-8')); } catch (e) { die(`草稿文件 JSON 解析失败: ${e.message}\n文件: ${draftPath}`); }
   const v = validateDraft(draft); if (!v.valid) die('草稿验证失败: ' + v.errors.join('; '));
   const cleanedContent = stripNitroPack(draft.content);
-  const dup = await checkDuplicate(site, draft.title); if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
-  const q = await checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site); if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; ')); if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
+  // 去重检查与质量检查并行执行（两者无数据依赖），缩短 publish 总耗时
+  const [dup, q] = await Promise.all([
+    checkDuplicate(site, draft.title),
+    checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)
+  ]);
+  if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
+  if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
+  if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
   const catIds = await resolveCategoryIds(site, site.categories);
   let finalContent = cleanedContent; let tagIds = [];
   if (site.cdn && site.cdn.mode === 'search') { try { images = await searchImages(site.images || {}, draft.tags || [], draft.title); } catch (e) { log('warn', '图片搜索失败:', e.message); } if (images.length) finalContent = mixImages(finalContent, images); }
   else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
   else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
-  if (draft.tags?.length) { for (const t of draft.tags) { try { const id = await findOrCreate(site, 'tags', t, tagCache); tagIds.push(id); } catch (e) { log('warn', `标签创建失败: ${t}`, e.message); } } }
+  if (draft.tags?.length) {
+    // 并发创建标签，限制并发数避免过多请求；失败标签记录警告后跳过
+    const results = await concurrentMap(draft.tags, 5, async (t) => {
+      try { return await findOrCreate(site, 'tags', t, tagCache); }
+      catch (e) { log('warn', `标签创建失败: ${t}`, e.message); return null; }
+    });
+    tagIds = results.filter(r => r !== null);
+  }
   const res = await wpFetch(site, 'posts', { method: 'POST', body: JSON.stringify({ title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', categories: catIds, tags: tagIds }) });
   log('info', `发布成功: ${res.link} (ID: ${res.id})`);
 }

@@ -26,6 +26,12 @@ Thumbs.db
 # Local config
 .wpb/
 
+# npm pack tarballs
+*.tgz
+
+# Publish draft samples (run artifacts)
+draft.json
+
 # Test artifacts
 *.tmp
 *.temp
