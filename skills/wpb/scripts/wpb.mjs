@@ -24,6 +24,7 @@ const LVL_IDX = { debug: 0, info: 1, warn: 2, error: 3 };
 const log = (lvl, msg, data = {}, skipPrefix = false) => { if (LVL_IDX[lvl] < LVL_IDX[LOG_LEVEL]) return; const line = (skipPrefix ? '' : `[${new Date().toISOString()}] [${lvl.toUpperCase()}] `) + msg + (data && Object.keys(data).length ? ' ' + JSON.stringify(data) : ''); writeSync(lvl === 'error' || lvl === 'warn' ? 2 : 1, line + '\n'); };
 const die = (msg, code = 1) => { writeSync(2, String(msg) + '\n'); process.exit(code); };
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
+const HREF_RE = /href="(https?:\/\/[^"]+)"/g;
 const asArray = x => Array.isArray(x) ? x : [x];
 const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 const isUrl = p => /^https?:\/\//i.test(p);
@@ -65,7 +66,6 @@ async function readTable(p) {
 // ── 图片搜索 ──
 async function searchImages(cfg, tags, title) {
   const keys = cfg.keys || (cfg.key ? [cfg.key] : []); if (!keys.length) { log('warn', '  ⚠ 未配置 images.keys'); return []; }
-  const key = keys[Math.floor(Math.random() * keys.length)];
   const { gl = 'pl', hl = 'pl', tbs = 'qdr:w', query } = cfg;
   let q;
   if (query) { q = String(query).slice(0, 100); }
@@ -73,11 +73,50 @@ async function searchImages(cfg, tags, title) {
     const keep = (tags || []).filter(t => t.length > 2 && !/^\d+\s*(in|pack|pcs|set|pairs?|stk|ctn|box|bag|roll|sheets?|ml|g|kg|cm|mm|inch)/i.test(t));
     q = [...keep, title].filter(Boolean).join(' ').slice(0, 100);
   }
-  const res = await fetchWithRetry('https://google.serper.dev/images', { method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ q, gl, hl, tbs }) });
-  if (!res.ok) { log('warn', `  图片搜索失败: ${res.status}`); return []; }
-  let data; try { data = await res.json(); } catch { log('warn', '  图片搜索响应解析失败'); return []; }
-  if (!data.images || !data.images.length) { log('warn', '  图片搜索返回空结果'); return []; }
-  return data.images.map(i => i.imageUrl).filter(u => u && /^https?:\/\//.test(u));
+  // 多 key 轮询 + 指数退避重试，总尝试次数限制
+  const maxAttempts = keys.length * 3; // 每个 key 最多尝试 3 次
+  let attempt = 0;
+  let lastError = null;
+  const backoff = (i) => 500 * 2 ** Math.min(i, 5) + Math.random() * 200;
+  while (attempt < maxAttempts) {
+    const keyIndex = attempt % keys.length;
+    const key = keys[keyIndex];
+    try {
+      const res = await fetchWithRetry('https://google.serper.dev/images', {
+        method: 'POST',
+        headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q, gl, hl, tbs })
+      }, 1); // 每个请求内部重试 1 次（共 2 次尝试）
+      if (!res.ok) {
+        log('warn', `  图片搜索失败 (key ${keyIndex+1}): ${res.status}`);
+        lastError = new Error(`HTTP ${res.status}`);
+        attempt++;
+        continue;
+      }
+      let data;
+      try { data = await res.json(); } catch {
+        log('warn', '  图片搜索响应解析失败');
+        attempt++;
+        continue;
+      }
+      if (data.images && data.images.length) {
+        return data.images.map(i => i.imageUrl).filter(u => u && /^https?:\/\//.test(u));
+      }
+      log('warn', `  图片搜索返回空结果 (key ${keyIndex+1})`);
+      attempt++;
+    } catch (e) {
+      log('warn', `  图片搜索错误 (key ${keyIndex+1}): ${e.message}`);
+      lastError = e;
+      attempt++;
+      if (attempt < maxAttempts) {
+        const delay = backoff(attempt);
+        log('debug', `  等待 ${Math.round(delay)}ms 后重试...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  log('warn', `  所有图片搜索尝试失败 (${maxAttempts} 次)`);
+  return [];
 }
 
 async function fetchWithRetry(url, opts, retries = 3) {
@@ -136,6 +175,10 @@ async function wpFetch(site, path, opts = {}) {
 async function uploadImage(site, imgUrl) {
   const res = await fetchWithRetry(imgUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error('获取图片失败: ' + res.status);
+  const contentLength = res.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > 5 * 1024 * 1024) {
+    throw new Error(`图片大小 ${Math.round(parseInt(contentLength, 10) / 1024 / 1024)}MB 超过 5MB 限制`);
+  }
   const buf = Buffer.from(await res.arrayBuffer());
   let raw; try { raw = decodeURIComponent(imgUrl.split('?')[0].split('/').pop() || 'image.jpg'); } catch { raw = imgUrl.split('?')[0].split('/').pop() || 'image.jpg'; }
   const ext = '.' + ((raw.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i) || [])[1] || 'jpg');
@@ -232,7 +275,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   for (const [c, m] of checks) if (c) issues.push(m);
   const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
   // 一次性提取所有 href 链接，复用于内链/外链/死链检测
-  const allLinks = [...body.matchAll(/href="(https?:\/\/[^"]+)"/g)].map(m => m[1]);
+  const allLinks = [...body.matchAll(HREF_RE)].map(m => m[1]);
   if (siteOrigin) {
     const internalLinks = allLinks.filter(u => u.startsWith(siteOrigin));
     if (!internalLinks.length) warnings.push('没有内部链接');
