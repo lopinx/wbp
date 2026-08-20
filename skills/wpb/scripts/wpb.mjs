@@ -446,9 +446,10 @@ async function main() {
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = (await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  let products = []; { const ok = prodPaths.filter(pathOk); if (ok.length) products = await readTable(ok[Math.floor(Math.random() * ok.length)]); }
-  let promptDoc = ''; { const ok = promptPaths.filter(pathOk); if (ok.length) { const p = ok[Math.floor(Math.random() * ok.length)]; promptDoc = isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); } }
-  let extDocs = ''; for (const ep of extPaths) if (pathOk(ep)) extDocs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`;
+  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; return readTable(ok[Math.floor(Math.random() * ok.length)]); };
+  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); };
+  const loadExtDocs = async () => { let docs = ''; for (const ep of extPaths) if (pathOk(ep)) docs += `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`; return docs; };
+  const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
   if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: site.name, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }

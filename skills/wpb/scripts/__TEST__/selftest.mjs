@@ -454,7 +454,7 @@ ok(src.includes('fetchWithRetry(u, { method:'), '死链检测使用 fetchWithRet
 // uploadExternalImages img src 正则同时匹配单引号和双引号
 ok(src.includes("src=[\"']([^\"']+)[\"']"), 'uploadExternalImages img src 正则匹配单双引号');
 // prompts/extensions 支持 URL 路径（isUrl 判断后走 fetch 而非 readFileSync）
-ok(src.includes('promptDoc = isUrl(p)'), 'prompts 支持 URL 路径');
+ok(src.includes('isUrl(p)'), 'prompts 支持 URL 路径');
 ok(src.includes('isUrl(ep)'), 'extensions 支持 URL 路径');
 
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
