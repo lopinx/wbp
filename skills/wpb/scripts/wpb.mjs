@@ -191,9 +191,17 @@ async function uploadImage(site, imgUrl) {
 
 function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.env.WP_PASSWORD || site.pass}`).toString('base64'); }
 async function uploadExternalImages(site, html) {
-  const urls = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]), results = {};
+  const urls = [...new Set([...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]))];
   const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
-  for (const url of urls) { if (siteOrigin && url.startsWith(siteOrigin) || results[url]) continue; try { log('info', `  正在上传: ${url.slice(0, 60)}...`); results[url] = await uploadImage(site, url); log('info', `  → ${results[url]}`); } catch (e) { log('warn', `  ⚠ 上传失败: ${e.message}`); } }
+  const external = urls.filter(url => !(siteOrigin && url.startsWith(siteOrigin)));
+  if (!external.length) return {};
+  // 并发上传外部图片，限制并发数 5，避免同时发起过多请求
+  const entries = await concurrentMap(external, 5, async (url) => {
+    try { log('info', `  正在上传: ${url.slice(0, 60)}...`); const r = await uploadImage(site, url); log('info', `  → ${r}`); return [url, r]; }
+    catch (e) { log('warn', `  ⚠ 上传失败: ${e.message}`); return [url, null]; }
+  });
+  const results = {};
+  for (const [url, r] of entries) if (r) results[url] = r;
   return results;
 }
 
