@@ -58,6 +58,24 @@ npm i -g github:lopinx/wpb
 | `wpb fetch <url>` | 拉取已发布文章原文（供改写更新） | `wpb fetch https://example.com/old-post` |
 | `wpb publish <file>` | 读取草稿并执行发布（草稿含 postId 时走更新路径） | `wpb publish ~/.wpb/_draft.json` |
 
+### AI 工具调用（`/wpb`）
+
+通过 `wpb install` 为 AI CLI 创建命令文件后，可直接用 `/wpb` 调用，兼容 Claude Code、Gemini CLI、Cursor、ZCode 等 11 种工具。每次调用仅处理单篇文章（单篇限制），不支持批量循环。
+
+```bash
+# 无参数：随机选题，自动生成并发布
+/wpb
+
+# 带主题描述：指定文章方向
+/wpb 发布一篇关于电子烟的文章
+/wpb publish an article about Elf Bar
+
+# 更新已有文章：拉取原文 → 改写 → 重新发布
+/wpb 更新 https://example.com/old-post
+```
+
+**单次调用工作流**：`/wpb` → 随机选取关键词 → AI 撰写文章草稿 → 自动执行去重检查、质量检查、图片处理 → 发布到 WordPress。质量检查不通过时需修改内容后重新提交。
+
 ### npm scripts
 
 ```bash

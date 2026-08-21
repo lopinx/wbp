@@ -58,6 +58,24 @@ npm i -g github:lopinx/wpb
 | `wpb fetch <url>` | Fetch a published article for rewriting/updating | `wpb fetch https://example.com/old-post` |
 | `wpb publish <file>` | Read draft and publish (update path when draft contains postId) | `wpb publish ~/.wpb/_draft.json` |
 
+### AI Tool Invocation (`/wpb`)
+
+After running `wpb install` to create command files for AI CLIs, you can call `/wpb` directly. Compatible with 11 tools including Claude Code, Gemini CLI, Cursor, and ZCode. Each invocation processes exactly one article (single-article limit); batch looping is not supported.
+
+```bash
+# No args: random keyword selection, auto-generate and publish
+/wpb
+
+# With topic description: specify article direction
+/wpb publish an article about Elf Bar
+/wpb 发布一篇关于电子烟的文章
+
+# Update an existing article: fetch → rewrite → republish
+/wpb 更新 https://example.com/old-post
+```
+
+**Single-invocation workflow**: `/wpb` → random keyword selection → AI writes article draft → automatic dedup check, quality check, image processing → publish to WordPress. If quality check fails, revise the content and resubmit.
+
 ### npm scripts
 
 ```bash
