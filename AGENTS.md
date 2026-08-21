@@ -3,14 +3,14 @@
 # wpb
 
 ## 用途
-跨平台 WordPress 发布 CLI 工具（wpb.mjs），兼容 11 种 AI 工具（Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学、ZCode）。单命令工作流：从 CSV/TXT/XLSX/XLS/URL 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。通过 `npm i -g github:lopinx/wpb` 全局安装，package.json `bin` 字段自动注册 `wpb` 命令。
+跨平台 WordPress 发布 CLI 工具（wpb.mjs），兼容 11 种 AI 工具（Claude Code、Hermes、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、Cursor、GitHub Copilot、OpenCode、小U同学、ZCode）。单命令工作流：从 CSV/TXT/XLSX/XLS/URL 随机选取关键词 → 生成内容 → 混排图片 → 通过 WP REST API 发布。支持 `wpb fetch <URL>` 拉取已发布文章并改写更新（草稿含 postId 时走更新路径）。通过 `npm i -g github:lopinx/wpb` 全局安装，package.json `bin` 字段自动注册 `wpb` 命令。
 
 ## 关键文件
 
 | 文件 | 说明 |
 |------|------|
-| `skills/wpb/scripts/wpb.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、数据表读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测、指数退避重试、缓存、首次运行自动初始化（initConfig）、手动安装（doInstall）。`readTable` 使用 SheetJS (xlsx 0.20.3) 统一解析 CSV/TXT/XLSX/XLS/URL |
-| `skills/wpb/scripts/__TEST__/selftest.mjs` | 自动化测试 (223/223 通过)，覆盖语法、pick、TOML 解析（含边界情况、数组引号内逗号、混用单双引号）、去重哈希、图片混排（含避开小标题/首段前/尾段后、alt/title 派生与 HTML 转义、NitroPack CDN URL 清理）、图片函数（含 searchImages query 字段功能测试、uploadImage decodeURI 回退与 content-type 校验、uploadExternalImages 空 siteOrigin 防护）、WP API 函数（含 wpFetch JSON 解析错误处理、findOrCreate 分页上限防护、checkDuplicate 标题截断保护、checkQuality 关键词正则转义防护与 CJK 词数统计）、错误处理（含站点字段校验、JSON 解析错误、validateDraft 非对象防护）、文档验证、安装逻辑（doInstall、initConfig、ensureDefaultData 公共函数、postinstall.mjs 已移除）、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字） |
+| `skills/wpb/scripts/wpb.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、数据表读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测（含更新时排除自身）、指数退避重试、缓存、首次运行自动初始化（initConfig）、手动安装（doInstall）、`wpb fetch` 命令（按 URL 域名匹配站点、拉取原文供改写）、publish 更新路径（多站点安全绑定 site + postId）。`readTable` 使用 SheetJS (xlsx 0.20.3) 统一解析 CSV/TXT/XLSX/XLS/URL |
+| `skills/wpb/scripts/__TEST__/selftest.mjs` | 自动化测试 (263/263 通过)，覆盖语法、pick、TOML 解析（含边界情况、数组引号内逗号、混用单双引号）、去重哈希、图片混排（含避开小标题/首段前/尾段后、alt/title 派生与 HTML 转义、NitroPack CDN URL 清理）、图片函数（含 searchImages query 字段功能测试、uploadImage decodeURI 回退与 content-type 校验、uploadExternalImages 空 siteOrigin 防护）、WP API 函数（含 wpFetch JSON 解析错误处理、findOrCreate 分页上限防护、checkDuplicate 标题截断保护与 excludeId 排除自身、checkQuality 关键词正则转义防护与 CJK 词数统计）、fetch 命令与 publish 更新路径（含 validateDraft postId/site 校验、findSiteByOrigin 域名匹配、processImagesAndTags 公共函数、多站点安全绑定）、错误处理（含站点字段校验、JSON 解析错误、validateDraft 非对象防护）、文档验证、安装逻辑（doInstall、initConfig、ensureDefaultData 公共函数、postinstall.mjs 已移除）、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字） |
 | `package.json` | Node.js 项目清单；`bin` 字段注册全局 `wpb` 命令；无 `postinstall` 钩子（npm 安装不执行脚本，首次运行时自动初始化）；`dependencies` 包含 xlsx (SheetJS 0.20.3, CDN) |
 | `README.md` | 完整用户文档 |
 
@@ -33,8 +33,8 @@
 
 ### 测试要求
 - `node --check skills/wpb/scripts/wpb.mjs` 验证语法
-- `node skills/wpb/scripts/__TEST__/selftest.mjs` 运行完整测试套件 (223/223 通过)
-- 测试覆盖：语法、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留、避开小标题/首段前/尾段后）、图片函数、WP API 函数、helper 函数、错误处理、文档验证、数据文件完整性、错误边界、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字）
+- `node skills/wpb/scripts/__TEST__/selftest.mjs` 运行完整测试套件 (263/263 通过)
+- 测试覆盖：语法、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留、避开小标题/首段前/尾段后）、图片函数、WP API 函数、helper 函数、错误处理、文档验证、数据文件完整性、错误边界、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字）、fetch 命令与 publish 更新路径（含 validateDraft postId/site 校验、findSiteByOrigin 域名匹配、processImagesAndTags 公共函数、多站点安全绑定）
 
 ### 常用模式
 - 迷你 TOML 解析器，支持内联注释、单引号、转义字符、点号键（site.myblog.name）
@@ -43,6 +43,7 @@
 - WordPress REST API 基础认证（应用程序密码）
 - 通过段落位置重构实现图片混排
 - 质量验证：词数（≥5000）、段落（≥10）、H3（≥3）、标题（≥10）、摘要（≥50）、标签（3-10）、死链、内链（≥3 警告）、关键词命中（警告）、E-E-A-T 外链（警告）
+- **文章更新**：`wpb fetch <URL>` 按 URL 域名匹配站点（多站点不随机），拉取原文供 AI 改写；草稿含 `postId`+`site` 时 publish 走更新路径（POST /posts/{id}），多站点安全绑定 site 字段，无绑定且多站点时拒绝执行
 - 数据表读取：SheetJS (xlsx 0.20.3) 统一解析 CSV/TXT/XLSX/XLS/URL，自动检测格式、分隔符、编码
 - 四种图片模式：S3（混排）、图片搜索（Serper.dev 多 key 轮询）、CDN（直传）、媒体库（回退）
 

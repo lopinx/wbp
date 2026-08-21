@@ -51,13 +51,14 @@ npm i -g github:lopinx/wpb
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `wpb pick` | 随机选取一个关键词 + 输出完整上下文（JSON） | `wpb pick` |
-| `wpb publish <file>` | 读取草稿并执行完整发布流程 | `wpb publish ~/.wpb/_draft.json` |
+| `wpb fetch <url>` | 拉取已发布文章原文（供改写更新） | `wpb fetch https://example.com/old-post` |
+| `wpb publish <file>` | 读取草稿并执行发布（草稿含 postId 时走更新路径） | `wpb publish ~/.wpb/_draft.json` |
 
 
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (223/223 通过)
+npm test           # 运行自检测试套件 (263/263 通过)
 ```
 
 ---
@@ -137,6 +138,8 @@ wpb publish <草稿文件路径>
 | `excerpt` | string | ✅ | 文章摘要（≥50字符） |
 | `content` | string | ✅ | HTML 格式的文章正文，需包含 `<p>` 段落和 `<h3>` 小标题 |
 | `tags` | string[] | ❌ | 标签数组（3-10个，用于质量检查） |
+| `postId` | number | ❌ | 已有文章 ID（更新时必填，由 `wpb fetch` 输出） |
+| `site` | string | ❌ | 站点名（多站点更新时必填，由 `wpb fetch` 输出） |
 
 ### 第 4 步：发布文章
 
@@ -146,11 +149,30 @@ wpb publish <草稿文件路径>
 
 发布流程自动执行以下步骤：
 
-1. **去重检查 + 质量检查**：并行执行——搜索 WordPress 中是否已有相同标题的文章（重复则拒绝），同时验证词数、段落、H3、标题长度、摘要长度、标签数量、失效链接（不通过则拒绝）
+1. **去重检查 + 质量检查**：并行执行——搜索 WordPress 中是否已有相同标题的文章（重复则拒绝，更新时排除自身），同时验证词数、段落、H3、标题长度、摘要长度、标签数量、失效链接（不通过则拒绝）
 2. **分类解析**：将配置的分类（数字 ID 或名称）解析为 WordPress 分类 ID，自动创建不存在的分类
 3. **图片处理**：根据配置的 `cdn.mode` 处理图片（见下方「图片模式」一节）
 4. **标签创建**：自动在 WordPress 中创建不存在的标签
-5. **发布文章**：通过 WordPress REST API 创建已发布状态的文章
+5. **发布文章**：通过 WordPress REST API 创建已发布状态的文章（草稿含 `postId` 时走更新路径）
+
+### 第 5 步：更新已有文章
+
+当需要改写或优化已发布的站内文章时：
+
+```bash
+# 1. 拉取原文（仅接受文章 URL，不接受 ID）
+wpb fetch https://example.com/old-post
+```
+
+`wpb fetch` 从 URL 的域名自动匹配配置站点（多站点场景下不随机选取），输出包含 `postId`、`site`、`title`、`excerpt`、`content`、`tags`、`categories` 的 JSON。
+
+```bash
+# 2. AI 基于原文改写，保存草稿 JSON（保留 postId 和 site 字段）
+# 3. 发布（自动检测 postId 走更新路径）
+wpb publish <草稿文件路径>
+```
+
+> **多站点安全**：更新路径绝不随机选站点。草稿含 `site` 字段时按名称精确匹配配置站点；无 `site` 且单站点配置时回退使用该站点；无 `site` 且多站点配置时拒绝执行并提示先用 `wpb fetch` 获取完整上下文。
 
 ---
 
