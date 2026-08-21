@@ -1,19 +1,21 @@
 ---
 name: wpb
-description: WordPress AI publisher — pick keyword, generate, mix images, publish via REST API
+description: WordPress AI publisher — pick keyword, generate, mix images, publish single article via REST API
 triggers:
   - wordpress
   - publish
   - wp
   - 发布
   - 文章
-argument-hint: "<任务描述> [数量]"
+argument-hint: "<任务描述>"
 ---
 
 # WordPress Publisher Skill
 
 ## Purpose
 跨平台 WordPress 发布 CLI 工具，兼容 11 种 AI 工具（Claude Code、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、小U同学、Cursor、GitHub Copilot、OpenCode、Hermes、ZCode）。工作流：从关键词池随机选取主题 → AI 撰写内容 → 自动混排图片 → 通过 WP REST API 发布。支持通过 `wpb fetch` 拉取已发布文章并改写更新。
+
+> **单篇限制**：每次调用仅处理一篇文章（pick → 撰写 → publish 为一次完整流程）。不支持批量生成或多篇发布，请勿循环调用。
 
 ## When to Activate
 - 用户说 "发布文章"、"写博客"、"publish"、"wordpress"
@@ -158,7 +160,6 @@ wpb publish <草稿文件路径>
 
 ```
 /wpb 发布一篇关于电子烟的文章
-/wpb 发布5篇关于一次性电子烟的文章
 /wpb publish an article about Elf Bar
 /wpb 更新 https://example.com/old-post
 ```
