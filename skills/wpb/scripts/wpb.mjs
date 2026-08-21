@@ -164,13 +164,16 @@ async function searchImages(cfg, tags, title) {
 
 async function fetchWithRetry(url, opts, retries = 3) {
   const backoff = i => 1000 * 2 ** i + Math.random() * 200;
+  // 保留外部 signal（允许调用方指定更短超时，如死链检测 5s）；未提供时使用默认超时
+  const extSignal = opts.signal || AbortSignal.timeout(TIMEOUT_MS);
   for (let i = 0; i <= retries; i++) {
     try {
-      // 每次重试创建新 signal：外部 signal 会被复用导致剩余时间递减，统一改用新建的 timeout signal
+      // 每次重试新建独立 signal：外部 signal 会被复用导致剩余时间递减，统一改用新建的 timeout signal
       // 注入 User-Agent：部分服务器（含 Cloudflare）要求 UA 非空，否则握手后断开连接
       const headers = { ...opts.headers };
-      if (!('user-agent' in headers)) headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS), headers });
+      if (!Object.keys(headers).some(k => k.toLowerCase() === 'user-agent'))
+        headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+      const res = await fetch(url, { ...opts, signal: extSignal, headers });
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i >= retries) return res;
       const d = backoff(i); log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
@@ -297,8 +300,11 @@ async function processImagesAndTags(site, content, tags, title) {
 }
 
 // ── 站点匹配与术语反查（fetch / 更新路径共用）──
+// validateSite：url/user/categories 必填；pass 在未设置 WP_PASSWORD 环境变量时必填
+const SITE_REQUIRED_FIELDS = ['url', 'user', 'categories'];
 function validateSite(siteName, site) {
-  for (const f of ['url', 'user', 'pass', 'categories']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
+  for (const f of SITE_REQUIRED_FIELDS) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
+  if (!site.pass && !process.env.WP_PASSWORD) die(`站点 [site.${siteName}] 缺少 pass 字段（或设置 WP_PASSWORD 环境变量）`);
   if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
 }
 // 按文章 URL 的域名精确匹配配置站点；更新路径必须显式绑定站点，禁止随机选取

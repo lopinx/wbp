@@ -79,7 +79,7 @@ After running `wpb install` to create command files for AI CLIs, you can call `/
 ### npm scripts
 
 ```bash
-npm test           # Run the self-test suite (290/290 passing)
+npm test           # Run the self-test suite (294/294 passing)
 ```
 
 ---
@@ -218,7 +218,7 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # Core single file (all logic, includes initConfig first-run setup)
 │           └── __TEST__/
-│               └── selftest.mjs       # Self-test suite (290/290 passing)
+│               └── selftest.mjs       # Self-test suite (294/294 passing)
 ```
 
 **Runtime-generated**:
@@ -564,7 +564,7 @@ Once set, wpb will use the environment variables first; TOML values will be igno
 
 ```
 skills/wpb/scripts/wpb.mjs         # Core single file (all logic, includes initConfig first-run setup)
-skills/wpb/scripts/__TEST__/selftest.mjs  # Self-test suite (290/290 passing)
+skills/wpb/scripts/__TEST__/selftest.mjs  # Self-test suite (294/294 passing)
 skills/wpb/SKILL.md                # AI tool command file template
 skills/wpb/references/data/        # Sample data files
 ```

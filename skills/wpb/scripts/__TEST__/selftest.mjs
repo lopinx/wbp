@@ -339,10 +339,13 @@ ok(src.includes('#accessKeyId'), 'DEFAULT_CFG 使用 accessKeyId');
 ok(src.includes('#secretAccessKey'), 'DEFAULT_CFG 使用 secretAccessKey');
 // publish 命令缺少文件参数时提示用法
 ok(src.includes("用法: wpb publish"), 'publish 缺参数时显示用法');
-// fetchWithRetry 每次重试新建独立 signal（避免外部 signal 复用时剩余时间递减）
-ok(/signal: AbortSignal\.timeout\(TIMEOUT_MS\)/.test(src), 'fetchWithRetry 每次重试新建独立 signal');
+// fetchWithRetry 保留外部 signal（允许调用方指定更短超时，如死链检测 5s）
+ok(/opts\.signal \|\| AbortSignal\.timeout\(TIMEOUT_MS\)/.test(src), 'fetchWithRetry 保留外部 signal，无则用默认超时');
+ok(/signal: extSignal/.test(src), 'fetchWithRetry 传递 extSignal 给 fetch');
 // uploadImage 走 fetchWithRetry 重试
 ok(/await fetchWithRetry\(`\$\{site\.url/.test(src), 'uploadImage 走 fetchWithRetry 重试');
+// fetchWithRetry UA 注入大小写不敏感（避免已有 User-Agent 键时重复设置）
+ok(/keys\(headers\)\.some\(k => k\.toLowerCase\(\) === 'user-agent'\)/.test(src), 'fetchWithRetry UA 判断大小写不敏感');
 // uploadImage decodeURIComponent 回退（非法 % 序列时用原始文件名而非 image.jpg）
 ok(/catch \{ raw = imgUrl\.split/.test(src), 'uploadImage decodeURI 失败时回退原始文件名');
 // uploadImage content-type 校验（非图片类型回退为 image/jpeg）
@@ -707,6 +710,21 @@ try {
   ok(noField.status !== 0, '缺少必填字段退出码非零');
   const noFieldOut = noField.stderr + noField.stdout;
   ok(noFieldOut.includes('缺少必填字段'), '缺少必填字段错误提示');
+} finally {
+  writeFileSync(cfgPath, cfgBackup, 'utf-8');
+}
+
+// validateSite 在 WP_PASSWORD 环境变量设置时允许 pass 字段为空
+try {
+  writeFileSync(cfgPath, '[site.nopass]\nname = "test"\nurl = "https://example.com/wp-json/wp/v2"\nuser = "admin"\ncategories = [1]\nkeywords = ["data/keywords.csv"]\n', 'utf-8');
+  const oldEnv = process.env.WP_PASSWORD;
+  process.env.WP_PASSWORD = 'test-pass';
+  const noPass = run('wpb.mjs', ['pick'], { env: { ...process.env, WP_PASSWORD: 'test-pass' } });
+  // 不会因缺 pass 而退出（可能因网络错误退出，但不应该是 validateSite 报错）
+  const noPassOut = noPass.stderr + noPass.stdout;
+  ok(!noPassOut.includes('缺少必填字段: pass'), 'WP_PASSWORD 环境变量设置时允许 pass 为空');
+  ok(noPassOut.includes('WP_PASSWORD 环境变量') || !noPassOut.includes('缺少必填字段'), 'WP_PASSWORD 设置时不报 pass 缺失');
+  if (oldEnv === undefined) delete process.env.WP_PASSWORD; else process.env.WP_PASSWORD = oldEnv;
 } finally {
   writeFileSync(cfgPath, cfgBackup, 'utf-8');
 }
