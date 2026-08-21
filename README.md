@@ -2,9 +2,13 @@
 
 > 跨平台 WordPress 发布 CLI — 单命令：随机取关键词 → AI 写文 → 混排图片 → WP REST API 发布
 
+<div align="center">
+
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-280%2F280%20passing-brightgreen)](#)
+
+</div>
 
 ---
 
@@ -53,7 +57,6 @@ npm i -g github:lopinx/wpb
 | `wpb pick` | 随机选取一个关键词 + 输出完整上下文（JSON） | `wpb pick` |
 | `wpb fetch <url>` | 拉取已发布文章原文（供改写更新） | `wpb fetch https://example.com/old-post` |
 | `wpb publish <file>` | 读取草稿并执行发布（草稿含 postId 时走更新路径） | `wpb publish ~/.wpb/_draft.json` |
-
 
 ### npm scripts
 
@@ -181,6 +184,7 @@ wpb publish <草稿文件路径>
 ```
 wpb/
 ├── README.md                          # 项目文档
+├── README.en.md                       # 英文文档
 ├── AGENTS.md                          # AI 代理工作指南
 ├── package.json                       # 项目清单（npm 全局安装入口）
 ├── skills/
@@ -223,7 +227,6 @@ wpb/
 - （可选）S3 兼容存储桶，或 Serper.dev API Key
 
 配置文件示例：
-
 
 ```toml
 # ~/.wpb/setting.toml
