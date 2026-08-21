@@ -112,7 +112,7 @@ function filterSpamKeywords(rows) { return rows.filter(r => { const first = r &&
 // ── 图片搜索 ──
 async function searchImages(cfg, tags, title) {
   const keys = cfg.keys || (cfg.key ? [cfg.key] : []); if (!keys.length) { log('warn', '  ⚠ 未配置 images.keys'); return []; }
-  const { gl = 'pl', hl = 'pl', tbs = 'qdr:w', query } = cfg;
+  const { gl, hl, tbs, query } = cfg;  // 不写死默认值；缺失则不传，由 Serper 自身默认
   let q;
   if (query) { q = String(query).slice(0, 100); }
   else {
@@ -127,10 +127,14 @@ async function searchImages(cfg, tags, title) {
     const keyIndex = attempt % keys.length;
     const key = keys[keyIndex];
     try {
+      const body = { q };
+      if (gl) body.gl = gl;
+      if (hl) body.hl = hl;
+      if (tbs) body.tbs = tbs;
       const res = await fetchWithRetry('https://google.serper.dev/images', {
         method: 'POST',
         headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q, gl, hl, tbs })
+        body: JSON.stringify(body)
       }, 1); // 每个请求内部重试 1 次（共 2 次尝试）
       if (!res.ok) {
         log('warn', `  图片搜索失败 (key ${keyIndex+1}): ${res.status}`);
@@ -432,14 +436,14 @@ async function doInstall() {
   if (existsSync(DATA_SRC)) { const REF_FILES = ['keywords.csv', 'products.csv', 'prompts.md']; const REF_DIRS = ['extensions']; const cp = (src, dst) => { if (!existsSync(dst)) mkdirSync(dst, { recursive: true }); for (const f of readdirSync(src)) { const s = join(src, f), d = join(dst, f); if (statSync(s).isDirectory()) { if (REF_DIRS.includes(f)) cp(s, d); } else if (REF_FILES.includes(f) || !existsSync(d)) writeFileSync(d, readFileSync(s)); } }; cp(DATA_SRC, DATA_DST); console.log('数据文件已复制到', DATA_DST); } else console.warn('⚠ 未找到数据源目录:', DATA_SRC); for (const d of [join(WP_DIR, 'data'), join(WP_DIR, 'data', 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
   ensureDefaultData(join(WP_DIR, 'data'));
 
-  if (existsSync(CFG)) { log('info', '配置文件已存在，跳过生成:', CFG); } else { writeFileSync(CFG, DEFAULT_CFG, 'utf-8'); console.log(`配置文件已生成: ${CFG}（请编辑后使用）`); }
+  ensureConfig();
 
   console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（任意目录可用：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
 function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
 
-function createCommandFile(tool, content) { const { dir } = tool; const filePath = join(homedir(), ...dir, 'wpb', 'SKILL.md'); try { if (!existsSync(dirname(filePath))) mkdirSync(dirname(filePath), { recursive: true }); writeFileSync(filePath, content, 'utf8'); console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`); } catch (e) { console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`); } }
+function createCommandFile(tool, content) { const { dir } = tool; const filePath = join(homedir(), ...dir, 'wpb', 'SKILL.md'); try { if (!existsSync(dirname(filePath))) mkdirSync(dirname(filePath), { recursive: true }); let skipped = false; if (existsSync(filePath)) { try { if (readFileSync(filePath, 'utf8') === content) skipped = true; } catch { skipped = false; } } if (skipped) console.log(`  • ${tool.name} 命令文件无变化，跳过：${filePath}`); else { writeFileSync(filePath, content, 'utf8'); console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`); } } catch (e) { console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`); } }
 
 function parseSelection(answer, total) { if (!answer) return []; const a = answer.toLowerCase().trim(); if (a === 'all') return Array.from({ length: total }, (_, i) => i); return a.split(',').map(s => parseInt(s.trim(), 10)).filter(i => !isNaN(i) && i >= 1 && i <= total).map(i => i - 1); }
 
@@ -484,6 +488,14 @@ extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
 #query = "固定搜索词"           # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
 `;
 
+// setting.toml 已存在则跳过，避免覆盖用户编辑过的配置（doInstall / initConfig 共用，幂等）
+function ensureConfig() {
+  if (existsSync(CFG)) { console.log('[wpb] 配置文件已存在，跳过生成:', CFG); return false; }
+  writeFileSync(CFG, DEFAULT_CFG, 'utf-8');
+  console.log(`[wpb] 配置文件已生成: ${CFG}`);
+  return true;
+}
+
 // 兜底生成缺失的默认数据文件（doInstall 和 initConfig 共用）
 function ensureDefaultData(dataDir) {
   const promptsPath = join(dataDir, 'prompts.md');
@@ -513,9 +525,8 @@ function initConfig() {
   for (const d of [DATA_DST, join(DATA_DST, 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
   // 兜底生成缺失的默认数据文件
   ensureDefaultData(DATA_DST);
-  // setting.toml 已存在则跳过，避免覆盖用户编辑过的配置
-  if (existsSync(CFG)) { console.log(`[wpb] 配置文件已存在，跳过生成: ${CFG}`); }
-  else { writeFileSync(CFG, DEFAULT_CFG, 'utf-8'); console.log(`[wpb] 配置文件已生成: ${CFG}`); }
+  // setting.toml 由 ensureConfig 幂等写入（已存在即跳过，避免覆盖用户配置）
+  ensureConfig();
   console.log(`[wpb] 数据文件已复制到 ${DATA_DST}`);
 }
 
