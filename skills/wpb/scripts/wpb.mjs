@@ -151,7 +151,10 @@ async function fetchWithRetry(url, opts, retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
       // 每次重试创建新 signal：外部 signal 会被复用导致剩余时间递减，统一改用新建的 timeout signal
-      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS) });
+      // 注入 User-Agent：部分服务器（含 Cloudflare）要求 UA 非空，否则握手后断开连接
+      const headers = { ...opts.headers };
+      if (!('user-agent' in headers)) headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+      const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS), headers });
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i >= retries) return res;
       const d = backoff(i); log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
