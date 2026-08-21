@@ -40,10 +40,12 @@ keywords = [
 ]
 
 # 产品数据（可选，用于丰富文章内容；不支持则跳过）
+# 可填字符串或数组（数组时工具随机选一个文件读取）
 # CSV 表头示例：name,brand,puffs,price,desc
 products = "data/products.csv"
 
 # 写作指令（可选，AI 根据此模板生成内容）
+# 可填字符串或数组（数组时工具随机选一个文件读取）
 prompts = "data/prompts.md"
 
 # 扩展知识文件（可选，辅助 AI 补充专业内容）

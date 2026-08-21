@@ -1,7 +1,10 @@
 node_modules/
+package-lock.json
+draft.json
 *.log
 *.tmp
 *.temp
+*.tgz
 .DS_Store
 Thumbs.db
 .wpb/
@@ -14,4 +17,3 @@ coverage/
 dist/
 build/
 *.tsbuildinfo
-lopinx-wpb-*.tgz

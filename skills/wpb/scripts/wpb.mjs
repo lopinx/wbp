@@ -142,9 +142,10 @@ async function fetchWithRetry(url, opts, retries = 3) {
 
 // ── S3 列表 ──
 async function s3List(cfg, limit) {
-  const { endpoint, region, bucket, prefix = '' } = cfg;
+  const { endpoint, region: cfgRegion = endpoint ? 'us-east-1' : undefined, bucket, prefix = '' } = cfg;
   if (!bucket && !endpoint) throw new Error('S3 配置缺少 bucket（且未配置 endpoint）');
-  if (!region && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
+  if (!cfgRegion && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
+  const region = cfgRegion;
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID || cfg.accessKeyId || cfg.key;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || cfg.secretAccessKey || cfg.secret;
   if (!accessKeyId || !secretAccessKey) throw new Error('S3 凭据未配置（accessKeyId/secretAccessKey 或环境变量 AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY）');
@@ -459,13 +460,16 @@ async function main() {
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat()); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; return readTable(ok[Math.floor(Math.random() * ok.length)]); };
-  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); };
+  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; try { return await readTable(ok[Math.floor(Math.random() * ok.length)]); } catch (e) { log('warn', '产品文件加载失败:', e.message); return []; } };
+  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; try { return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); } catch (e) { log('warn', '写作指令加载失败:', e.message); return ''; } };
   const loadExtDocs = async () => {
     const ok = extPaths.filter(ep => pathOk(ep)); if (!ok.length) return '';
-    // 并发加载扩展文档，限制并发数避免过多请求；保留 --- <filename> --- 分隔格式
-    const parts = await concurrentMap(ok, 5, async (ep) => `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`);
-    return parts.join('');
+    // 并发加载扩展文档，限制并发数避免过多请求；单个加载失败不影响整体，保留 --- <filename> --- 分隔格式
+    const parts = await concurrentMap(ok, 5, async (ep) => {
+      try { return `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
+      catch (e) { log('warn', '扩展知识加载失败:', e.message); return ''; }
+    });
+    return parts.filter(Boolean).join('');
   };
   const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
