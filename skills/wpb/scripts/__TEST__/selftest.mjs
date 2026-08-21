@@ -566,6 +566,9 @@ ok(src.includes('checkCLI'), '安装逻辑包含 CLI 检测');
 ok(src.includes('detectedTools'), '安装逻辑包含工具跟踪');
 ok(src.includes('npm update -g'), '安装逻辑包含 npm 全局安装升级提示');
 ok(src.includes('function initConfig'), 'wpb.mjs 包含 initConfig 首次运行初始化函数');
+// initConfig 应检测 setting.toml 已存在时跳过生成，避免覆盖用户配置
+ok(/initConfig[\s\S]*?existsSync\(CFG\)[\s\S]*?writeFileSync\(CFG/.test(src), 'initConfig 在 setting.toml 已存在时跳过生成');
+ok(src.includes('配置文件已存在，跳过生成'), 'initConfig 跳过生成时输出提示');
 ok(src.includes('function ensureDefaultData'), 'ensureDefaultData 公共函数已提取');
 ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wpb.mjs）');
 ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（改为运行时 initConfig）');

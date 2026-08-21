@@ -491,9 +491,9 @@ function initConfig() {
   for (const d of [DATA_DST, join(DATA_DST, 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
   // 兜底生成缺失的默认数据文件
   ensureDefaultData(DATA_DST);
-  // 生成 setting.toml
-  writeFileSync(CFG, DEFAULT_CFG, 'utf-8');
-  console.log(`[wpb] 配置文件已生成: ${CFG}`);
+  // setting.toml 已存在则跳过，避免覆盖用户编辑过的配置
+  if (existsSync(CFG)) { console.log(`[wpb] 配置文件已存在，跳过生成: ${CFG}`); }
+  else { writeFileSync(CFG, DEFAULT_CFG, 'utf-8'); console.log(`[wpb] 配置文件已生成: ${CFG}`); }
   console.log(`[wpb] 数据文件已复制到 ${DATA_DST}`);
 }
 
