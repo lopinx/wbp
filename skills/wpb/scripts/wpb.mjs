@@ -63,6 +63,14 @@ async function readTable(p) {
   return rows.slice(1).filter(r => Array.isArray(r) && r.some(v => String(v).trim() !== ''));
 }
 
+// ── 带域名关键词过滤 ──
+// 过滤 SEO 平台导出中混入的带域名垃圾词：site:xxx、xxx.com、xxx.pl、xxx site:xxx.com
+const SITE_RE = /\bsite:\s*[a-z0-9.-]+/i;
+// 匹配常见域名后缀（点号后 2-6 字母），覆盖 .com/.pl/.ru/.world 等，无需枚举全部 TLD
+const DOMAIN_RE = /\.[a-z]{2,6}\b/i;
+function isSpamKeyword(s) { const t = String(s ?? '').trim(); return !t || SITE_RE.test(t) || DOMAIN_RE.test(t); }
+function filterSpamKeywords(rows) { return rows.filter(r => { const first = r && r[0]; return first && !isSpamKeyword(first); }); }
+
 // ── 图片搜索 ──
 async function searchImages(cfg, tags, title) {
   const keys = cfg.keys || (cfg.key ? [cfg.key] : []); if (!keys.length) { log('warn', '  ⚠ 未配置 images.keys'); return []; }
@@ -449,7 +457,7 @@ async function main() {
   // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync
   const pathOk = p => p && (isUrl(p) || existsSync(p));
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
-  const keywords = (await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat(); if (!keywords.length) die('关键词文件为空');
+  const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat()); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
   const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; return readTable(ok[Math.floor(Math.random() * ok.length)]); };
   const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); };
