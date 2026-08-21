@@ -35,13 +35,13 @@ categories = [8603, "Disposable Vape", "E-cigarette"]
 # CSV 第一行须为表头，工具会读取表头后的每一行作为关键词
 # https 链接支持 Google Sheets 发布地址
 keywords = [
-  "data/keywords.xlsx",
+  "data/keywords.csv",
   # "https://docs.google.com/spreadsheets/d/e/.../pub?output=csv",  # 也支持在线表格
 ]
 
 # 产品数据（可选，用于丰富文章内容；不支持则跳过）
 # CSV 表头示例：name,brand,puffs,price,desc
-products = "data/products.xlsx"
+products = "data/products.csv"
 
 # 写作指令（可选，AI 根据此模板生成内容）
 prompts = "data/prompts.md"

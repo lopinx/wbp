@@ -371,10 +371,10 @@ url = "https://www.buchmistrz.com/wp-json/wp/v2"
 user = "admin"
 pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
 categories = [8603, "Disposable Vape"]  # 支持数字ID或名称，多个分类
-keywords = ["data/keywords.xlsx"]  # 可多个，支持 https:// URL（如 Google Sheets）
-products = "data/products.xlsx"  # 可选，支持 https:// URL，可多个（随机选一个）
+keywords = ["data/keywords.csv"]  # 可多个，支持 https:// URL（如 Google Sheets）
+products = "data/products.csv"  # 可选，支持 https:// URL，可多个（随机选一个）
 prompts = "data/prompts.md"  # 可选，支持 https:// URL，可多个（随机选一个）
-extensions = []  # 可选，支持 https:// URL
+extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
 
 # 四种图片模式（选其一）：
 # 1) S3 兼容 — mode="s3" 拉图池混排，endpoint 可选
