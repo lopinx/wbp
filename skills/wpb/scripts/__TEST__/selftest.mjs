@@ -738,7 +738,26 @@ writeFileSync(cfgPath, xlsxCfg, 'utf-8');
 const xlsxRes = run('wpb.mjs', ['pick']);
 ok(xlsxRes.status === 0, 'readTable 对 xlsx 退出码为 0');
 const xlsxOut = xlsxRes.stderr + xlsxRes.stdout;
-ok(xlsxOut.includes('测试关键词'), 'xlsx 成功解析并返回关键词');
+  ok(xlsxOut.includes('测试关键词'), 'xlsx 成功解析并返回关键词');
+  writeFileSync(cfgPath, cfgBackup, 'utf-8');
+
+// readTable 多 sheet xlsx：跳过日期 sheet，选关键词 sheet（GSC 导出格式）
+console.log('\n  XLSX 多 sheet 智能选择测试（GSC 导出格式）');
+const chartRows = [['日期', '点击次数', '展示', '点击率', '排名']];
+for (let d = 1; d <= 10; d++) chartRows.push([`2025-10-${String(d).padStart(2, '0')}`, '1', '2', '50%', '5']);
+const queryRows = [['热门查询', '点击次数', '展示', '点击率', '排名'], ['fizzy candy e papieros', '1', '0', '0%', '12'], ['buchmistrz', '958', '1181', '81%', '1']];
+const wbGsc = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wbGsc, XLSX.utils.aoa_to_sheet(chartRows), '图表');
+XLSX.utils.book_append_sheet(wbGsc, XLSX.utils.aoa_to_sheet(queryRows), '查询数');
+const gscBuf = XLSX.write(wbGsc, { type: 'buffer', bookType: 'xlsx' });
+writeFileSync(join(_td, 'gsc.xlsx'), gscBuf);
+const gscCfg = `site.x.url = "https://x.com"\nsite.x.user = "u"\nsite.x.pass = "p p p p p p p p"\nsite.x.categories = [1]\nsite.x.keywords = ["${join(_td, 'gsc.xlsx').replace(/\\/g, '/')}"]\nsite.x.products = ""\nsite.x.prompts = ""`;
+writeFileSync(cfgPath, gscCfg, 'utf-8');
+const gscRes = run('wpb.mjs', ['pick']);
+ok(gscRes.status === 0, 'GSC xlsx pick 退出码为 0');
+const gscOut = gscRes.stderr + gscRes.stdout;
+ok(!gscOut.includes('2025-10'), 'GSC xlsx 不返回日期作为关键词');
+ok(gscOut.includes('fizzy') || gscOut.includes('buchmistrz'), 'GSC xlsx 返回查询数 sheet 中的关键词');
 writeFileSync(cfgPath, cfgBackup, 'utf-8');
 
 // ── 15. 初始化流程真实测试（initConfig / 安装场景）──

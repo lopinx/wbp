@@ -7,6 +7,10 @@ import { execSync } from 'child_process';
 import { createHash, createHmac } from 'crypto';
 import readline from 'readline';
 import * as XLSX from 'xlsx';
+// 代理支持：当 native fetch TLS 失败时，通过 http-proxy-agent 重试
+let HttpProxyAgent = null;
+try { HttpProxyAgent = (await import('http-proxy-agent')).HttpProxyAgent; } catch {}
+const https = await import('node:https');
 
 // Windows 控制台默认代码页为 936 (GBK)，Node 输出 UTF-8 字节会被按 GBK 解码导致乱码
 // （如「用法」显示为「鐢ㄦ硶」）。切换到 65001 (UTF-8) 让控制台正确解码。
@@ -75,13 +79,29 @@ function parseToml(t) {
 }
 
 // ── 数据表读取（SheetJS）──
+// 采样首列，跳过以日期或 URL 为主的 sheet（如 Google Search Console 导出的"图表""网页"sheet）
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function pickSheet(wb) {
+  const names = wb.SheetNames;
+  if (names.length <= 1) return wb.Sheets[names[0]];
+  for (const name of names) {
+    const ws = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+    const samples = rows.slice(1, 11).map(r => String(r[0] ?? '').trim()).filter(Boolean);
+    if (!samples.length) continue;
+    const skipCount = samples.filter(v => DATE_RE.test(v) || /^https?:\/\//i.test(v)).length;
+    if (skipCount / samples.length < 0.5) return ws;
+  }
+  return wb.Sheets[names[0]];
+}
+
 async function readTable(p) {
   const url = isUrl(p);
   let data;
   if (url) { const res = await fetchWithRetry(p, { signal: AbortSignal.timeout(TIMEOUT_MS) }); if (!res.ok) throw new Error('URL 获取失败: ' + res.status + ' ' + p); data = await res.arrayBuffer(); }
   else { if (!existsSync(p)) throw new Error('文件未找到: ' + p); data = readFileSync(p); }
   const wb = XLSX.read(data, { type: url ? 'array' : 'buffer', cellDates: false });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+  const rows = XLSX.utils.sheet_to_json(pickSheet(wb), { header: 1, raw: false, defval: '' });
   return rows.slice(1).filter(r => Array.isArray(r) && r.some(v => String(v).trim() !== ''));
 }
 
@@ -159,6 +179,29 @@ async function fetchWithRetry(url, opts, retries = 3) {
       if (i >= retries) return res;
       const d = backoff(i); log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
     } catch (e) {
+      // TLS 失败时尝试通过代理重试（仅首失败时尝试一次，避免无限循环）
+      if (e.code === 'ECONNRESET' && HttpProxyAgent && url.startsWith('https://') && i === 0) {
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || 'http://127.0.0.1:7897';
+        try {
+          log('warn', '  TLS 失败，尝试通过代理 http-proxy-agent 重试...');
+          const proxyAgent = new HttpProxyAgent(proxyUrl);
+          const res = await new Promise((resolve, reject) => {
+            const req = https.default.request({
+              href: url,
+              headers: { ...opts?.headers, 'user-agent': headers['User-Agent'] },
+              agent: proxyAgent,
+              timeout: TIMEOUT_MS
+            }, r => resolve(r));
+            req.on('error', reject);
+            req.setTimeout(TIMEOUT_MS, () => { req.destroy(); reject(new Error('proxy timeout')); });
+            req.end();
+          });
+          if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
+          return res;
+        } catch (proxyErr) {
+          log('warn', '  代理重试也失败: ' + proxyErr.message);
+        }
+      }
       if (i >= retries) throw e;
       const d = backoff(i); log('warn', `  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
     }
