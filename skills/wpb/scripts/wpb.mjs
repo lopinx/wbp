@@ -76,7 +76,6 @@ async function searchImages(cfg, tags, title) {
   // 多 key 轮询 + 指数退避重试，总尝试次数限制
   const maxAttempts = keys.length * 3; // 每个 key 最多尝试 3 次
   let attempt = 0;
-  let lastError = null;
   const backoff = (i) => 500 * 2 ** Math.min(i, 5) + Math.random() * 200;
   while (attempt < maxAttempts) {
     const keyIndex = attempt % keys.length;
@@ -89,7 +88,6 @@ async function searchImages(cfg, tags, title) {
       }, 1); // 每个请求内部重试 1 次（共 2 次尝试）
       if (!res.ok) {
         log('warn', `  图片搜索失败 (key ${keyIndex+1}): ${res.status}`);
-        lastError = new Error(`HTTP ${res.status}`);
         attempt++;
         continue;
       }
@@ -106,7 +104,6 @@ async function searchImages(cfg, tags, title) {
       attempt++;
     } catch (e) {
       log('warn', `  图片搜索错误 (key ${keyIndex+1}): ${e.message}`);
-      lastError = e;
       attempt++;
       if (attempt < maxAttempts) {
         const delay = backoff(attempt);
