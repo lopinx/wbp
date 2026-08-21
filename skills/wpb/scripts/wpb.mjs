@@ -28,6 +28,8 @@ const HREF_RE = /href="(https?:\/\/[^"]+)"/g;
 const asArray = x => Array.isArray(x) ? x : [x];
 const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 const isUrl = p => /^https?:\/\//i.test(p);
+// 提取 URL origin（protocol+host），fetch 站点匹配与 checkQuality/uploadExternalImages 复用
+const siteOriginOf = url => (String(url).match(/^https?:\/\/[^/]+/i) || [''])[0];
 // 安全路径：URL 原样返回（由 readTable 远程获取）；绝对路径原样 resolve；相对路径解析到 ~/.wpb 并防越界
 const safePath = p => { if (!p) return null; if (isUrl(p)) return p; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 ~/.wpb: ${p} (解析为 ${a})`); return a; };
 function isValidKey(k) { return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k); }
@@ -142,9 +144,10 @@ async function fetchWithRetry(url, opts, retries = 3) {
 
 // ── S3 列表 ──
 async function s3List(cfg, limit) {
-  const { endpoint, region, bucket, prefix = '' } = cfg;
+  const { endpoint, region: cfgRegion = endpoint ? 'us-east-1' : undefined, bucket, prefix = '' } = cfg;
   if (!bucket && !endpoint) throw new Error('S3 配置缺少 bucket（且未配置 endpoint）');
-  if (!region && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
+  if (!cfgRegion && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
+  const region = cfgRegion;
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID || cfg.accessKeyId || cfg.key;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || cfg.secretAccessKey || cfg.secret;
   if (!accessKeyId || !secretAccessKey) throw new Error('S3 凭据未配置（accessKeyId/secretAccessKey 或环境变量 AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY）');
@@ -197,7 +200,7 @@ async function uploadImage(site, imgUrl) {
 function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.env.WP_PASSWORD || site.pass}`).toString('base64'); }
 async function uploadExternalImages(site, html) {
   const urls = [...new Set([...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]))];
-  const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
+  const siteOrigin = siteOriginOf(site.url);
   const external = urls.filter(url => !(siteOrigin && url.startsWith(siteOrigin)));
   if (!external.length) return {};
   // 并发上传外部图片，限制并发数 5，避免同时发起过多请求
@@ -255,7 +258,6 @@ async function processImagesAndTags(site, content, tags, title) {
 }
 
 // ── 站点匹配与术语反查（fetch / 更新路径共用）──
-const siteOriginOf = url => (String(url).match(/^https?:\/\/[^/]+/i) || [''])[0];
 function validateSite(siteName, site) {
   for (const f of ['url', 'user', 'pass', 'categories']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
   if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
@@ -335,7 +337,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const h3 = body.match(/<h3[^>]*>/g) || [];
   const checks = [[wordCount < 5000, `词数 ${wordCount} 少于 5000`], [paras.length < 10, `仅有 ${paras.length} 个段落`], [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`], [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`], [!excerpt || excerpt.length < 50, `摘要过短 (${excerpt?.length || 0} 字符)`], [!tags || tags.length < 3, `仅有 ${tags?.length || 0} 个标签`], [tags && tags.length > 10, `标签过多 (${tags.length} 个)`]];
   for (const [c, m] of checks) if (c) issues.push(m);
-  const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
+  const siteOrigin = siteOriginOf(site.url);
   // 一次性提取所有 href 链接，复用于内链/外链/死链检测
   const allLinks = [...body.matchAll(HREF_RE)].map(m => m[1]);
   if (siteOrigin) {
@@ -387,7 +389,7 @@ async function doInstall() {
 
   if (existsSync(CFG)) { log('info', '配置文件已存在，跳过生成:', CFG); } else { writeFileSync(CFG, DEFAULT_CFG, 'utf-8'); console.log(`配置文件已生成: ${CFG}（请编辑后使用）`); }
 
-  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（任意目录可用：wpb pick / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（任意目录可用：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
 function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
@@ -514,13 +516,16 @@ async function main() {
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat()); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; return readTable(ok[Math.floor(Math.random() * ok.length)]); };
-  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); };
+  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; try { return await readTable(ok[Math.floor(Math.random() * ok.length)]); } catch (e) { log('warn', '产品文件加载失败:', e.message); return []; } };
+  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; try { return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); } catch (e) { log('warn', '写作指令加载失败:', e.message); return ''; } };
   const loadExtDocs = async () => {
     const ok = extPaths.filter(ep => pathOk(ep)); if (!ok.length) return '';
-    // 并发加载扩展文档，限制并发数避免过多请求；保留 --- <filename> --- 分隔格式
-    const parts = await concurrentMap(ok, 5, async (ep) => `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`);
-    return parts.join('');
+    // 并发加载扩展文档，限制并发数避免过多请求；单个加载失败不影响整体，保留 --- <filename> --- 分隔格式
+    const parts = await concurrentMap(ok, 5, async (ep) => {
+      try { return `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
+      catch (e) { log('warn', '扩展知识加载失败:', e.message); return ''; }
+    });
+    return parts.filter(Boolean).join('');
   };
   const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }

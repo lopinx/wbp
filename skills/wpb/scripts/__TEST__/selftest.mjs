@@ -386,6 +386,13 @@ ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
 // s3List 必填字段校验（bucket/region，endpoint 配置时豁免）
 ok(src.includes('S3 配置缺少 bucket'), 's3List 校验 bucket 必填');
 ok(src.includes('S3 配置缺少 region'), 's3List 校验 region 必填');
+// s3List endpoint 配置时 region 兜底为 us-east-1（防止 createHmac 收到 undefined 抛 TypeError）
+ok(src.includes("region: cfgRegion = endpoint ? 'us-east-1' : undefined"), 's3List endpoint 配置时 region 兜底');
+// loadProducts/loadPromptDoc/loadExtDocs 加 try/catch 错误保护（单个加载失败不影响整体）
+ok(src.includes('产品文件加载失败'), 'loadProducts 失败时降级返回空数组');
+ok(src.includes('写作指令加载失败'), 'loadPromptDoc 失败时降级返回空字符串');
+ok(src.includes('扩展知识加载失败'), 'loadExtDocs 单个失败时跳过不影响整体');
+ok(src.includes('parts.filter(Boolean).join'), 'loadExtDocs 过滤空值后拼接');
 // 文件名清理支持拉丁扩展补充区（波兰语带附加符号字符）
 ok(src.includes('\\u0100-\\u017F'), '文件名清理保留波兰语带附加符号字符');
 ok(src.includes('\\u4e00-\\u9fff'), '文件名清理保留中日韩字符');
@@ -564,6 +571,11 @@ ok(existsSync(join(SCRIPT_DIR, '../references/data', 'keywords.csv')), 'keywords
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'products.csv')), 'products.csv 存在');
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'prompts.md')), 'prompts.md 存在');
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'extensions', 'wiedza.md')), 'wiedza.md 存在');
+// setting-reference.toml 含 fetch/更新工作流说明
+ok(existsSync(join(SCRIPT_DIR, '../references/setting-reference.toml')), 'setting-reference.toml 存在');
+const refToml = readFileSync(join(SCRIPT_DIR, '../references/setting-reference.toml'), 'utf-8');
+ok(refToml.includes('wpb fetch'), 'setting-reference.toml 含 fetch 命令说明');
+ok(refToml.includes('postId'), 'setting-reference.toml 含 postId 更新字段说明');
 
 // ── 13.1 CSV/TXT/XLSX 解析单元测试 ──
 console.log('\n## 13.1 CSV/TXT/XLSX 解析测试 (SheetJS)');
