@@ -2,6 +2,8 @@
 
 > 跨平台 WordPress 发布 CLI — 单命令：随机取关键词 → AI 写文 → 混排图片 → WP REST API 发布
 
+[English](README.en.md) | **中文**
+
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-280%2F280%20passing-brightgreen)](#)
