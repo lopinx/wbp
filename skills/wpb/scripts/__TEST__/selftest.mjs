@@ -358,8 +358,11 @@ ok(src.includes("paras[i].end"), 'mixImages 基于段落位置插入');
 ok(src.includes('</h3>'), 'mixImages 检测小标题避开');
 ok(src.includes('paras.length < 2'), 'mixImages 少于2段落不插入');
 // searchImages 支持 query 字段覆盖默认搜索词（tags+title）
-ok(src.includes('const { gl = \'pl\', hl = \'pl\', tbs = \'qdr:w\', query } = cfg'), 'searchImages 解构 query 字段');
+ok(src.includes('const { gl, hl, tbs, query } = cfg'), 'searchImages 解构 query 字段（gl/hl/tbs 不写死默认值）');
 ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
+ok(!/gl\s*=\s*'pl'/.test(src), 'searchImages 不再写死 gl 默认值 pl');
+ok(/if\s*\(gl\)\s*body\.gl/.test(src), 'searchImages 仅在配置了 gl 时才传该字段');
+ok(src.includes('const body = { q }'), 'searchImages 请求体以 q 为基础按需扩展');
 // searchImages query 字段功能测试（mock fetchWithRetry，验证实际调用参数）
 {
   const fnSrc = src.match(/async function searchImages[\s\S]*?\n\}/);
@@ -570,8 +573,12 @@ ok(src.includes('detectedTools'), '安装逻辑包含工具跟踪');
 ok(src.includes('npm update -g'), '安装逻辑包含 npm 全局安装升级提示');
 ok(src.includes('function initConfig'), 'wpb.mjs 包含 initConfig 首次运行初始化函数');
 // initConfig 应检测 setting.toml 已存在时跳过生成，避免覆盖用户配置
-ok(/initConfig[\s\S]*?existsSync\(CFG\)[\s\S]*?writeFileSync\(CFG/.test(src), 'initConfig 在 setting.toml 已存在时跳过生成');
-ok(src.includes('配置文件已存在，跳过生成'), 'initConfig 跳过生成时输出提示');
+ok(src.includes('function ensureConfig'), 'ensureConfig 幂等写入函数已提取');
+ok(/function ensureConfig[\s\S]*?existsSync\(CFG\)[\s\S]*?writeFileSync\(CFG/.test(src), 'ensureConfig 在 setting.toml 已存在时跳过生成');
+ok(src.includes('配置文件已存在，跳过生成'), 'ensureConfig 跳过生成时输出提示');
+ok(/doInstall[\s\S]*?ensureConfig\(\)/.test(src) && /function initConfig[\s\S]*?ensureConfig\(\)/.test(src), 'doInstall 与 initConfig 均走 ensureConfig 统一写入');
+ok(src.includes('命令文件无变化，跳过'), 'createCommandFile 内容相同时跳过写入');
+ok(/createCommandFile[\s\S]*?readFileSync[\s\S]*?===\s*content/.test(src), 'createCommandFile 比较新旧内容后再写入');
 ok(src.includes('function ensureDefaultData'), 'ensureDefaultData 公共函数已提取');
 ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wpb.mjs）');
 ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（改为运行时 initConfig）');
