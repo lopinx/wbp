@@ -123,6 +123,20 @@ ok(r2c.s.arr.length === 2, '数组混用单双引号');
 ok(r2c.s.arr[0] === 'double', '数组双引号元素');
 ok(r2c.s.arr[1] === 'single', '数组单引号元素');
 
+// 多行数组（跨行折叠）
+const r2d = pt(`[s]\narr = [\n  "a",\n  "b",\n  "c"\n]`);
+ok(Array.isArray(r2d.s.arr), '多行数组解析为数组');
+ok(r2d.s.arr.length === 3, '多行数组有 3 个元素');
+ok(r2d.s.arr[0] === 'a', '多行数组元素 0');
+ok(r2d.s.arr[1] === 'b', '多行数组元素 1');
+ok(r2d.s.arr[2] === 'c', '多行数组元素 2');
+// 多行数组含注释与尾逗号（模拟 setting-reference.toml 的 keywords 字段）
+const r2e = pt(`[s]\nkeywords = [\n  "data/a.csv",\n  # "https://example.com/pub?output=csv",\n  "data/b.csv",\n]`);
+ok(Array.isArray(r2e.s.keywords), '多行数组含注释解析为数组');
+ok(r2e.s.keywords.length === 2, '多行数组含注释去除注释后剩 2 个元素');
+ok(r2e.s.keywords[0] === 'data/a.csv', '多行数组含注释元素 0');
+ok(r2e.s.keywords[1] === 'data/b.csv', '多行数组含注释元素 1');
+
 // 单引号字符串
 const r3 = pt(`[s]\nname = 'hello'\npath = 'C:\\\\Users\\\\test'`);
 ok(r3.s.name === 'hello', '单引号字符串');

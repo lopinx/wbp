@@ -24,7 +24,7 @@ const LVL_IDX = { debug: 0, info: 1, warn: 2, error: 3 };
 const log = (lvl, msg, data = {}, skipPrefix = false) => { if (LVL_IDX[lvl] < LVL_IDX[LOG_LEVEL]) return; const line = (skipPrefix ? '' : `[${new Date().toISOString()}] [${lvl.toUpperCase()}] `) + msg + (data && Object.keys(data).length ? ' ' + JSON.stringify(data) : ''); writeSync(lvl === 'error' || lvl === 'warn' ? 2 : 1, line + '\n'); };
 const die = (msg, code = 1) => { writeSync(2, String(msg) + '\n'); process.exit(code); };
 const PARA_RE = /<p[^>]*>[\s\S]*?<\/p>/g;
-const HREF_RE = /href="(https?:\/\/[^"]+)"/g;
+const HREF_RE = /href=["']([^"']+?)["']/gi;
 const asArray = x => Array.isArray(x) ? x : [x];
 const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 const isUrl = p => /^https?:\/\//i.test(p);
@@ -38,7 +38,27 @@ const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Ar
 // ── 迷你 TOML 解析器 ──
 function parseToml(t) {
   const r = {}; let sectionPath = [];
-  for (const l of t.split('\n')) {
+  // 合并多行数组：跨行的 [...] 折回单行，逐字符剥离注释并跟踪括号/字符串状态
+  const logical = [];
+  let buf = '', depth = 0, inStr = false, q = '', esc = false;
+  for (const raw of t.split('\n')) {
+    let kept = '';
+    for (let i = 0; i < raw.length; i++) {
+      const c = raw[i];
+      if (esc) { esc = false; kept += c; continue; }
+      if (inStr) { if (c === '\\') esc = true; else if (c === q) inStr = false; kept += c; continue; }
+      if (c === '"' || c === "'") { inStr = true, q = c; kept += c; continue; }
+      if (c === '#') break; // 行内/整行注释在数组外即剥离，避免吞掉后续的 ]
+      if (c === '[') depth++;
+      else if (c === ']') depth = Math.max(0, depth - 1);
+      kept += c;
+    }
+    if (depth === 0 && !kept.trim()) { if (!buf) continue; }
+    buf = buf ? buf + ' ' + kept.trim() : kept;
+    if (depth === 0) { if (buf.trim()) logical.push(buf); buf = ''; }
+  }
+  if (buf.trim()) logical.push(buf);
+  for (const l of logical) {
     const v = l.trim(); if (!v || v.startsWith('#')) continue;
     const m = v.match(/^\[([^\]]+)\]$/); if (m) { sectionPath = m[1].split('.'); continue; }
     const kv = v.match(/^([\w.]+)\s*=\s*(.+)$/); if (!kv) continue;
@@ -443,8 +463,6 @@ extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
 function ensureDefaultData(dataDir) {
   const promptsPath = join(dataDir, 'prompts.md');
   if (!existsSync(promptsPath)) writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
-  const knowledgePath = join(dataDir, 'extensions', 'knowledge.md');
-  if (!existsSync(knowledgePath)) writeFileSync(knowledgePath, `# 领域知识\n\n## 行业术语\n- 保持专业度\n- 解释生僻术语\n\n## 注意事项\n- 避免过度营销\n- 引用来源\n`, 'utf-8');
   const keywordsPath = join(dataDir, 'keywords.csv');
   if (!existsSync(keywordsPath)) writeFileSync(keywordsPath, '\uFEFF' + ['keyword', '人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全'].map(r => r.includes(',') ? `"${r}"` : r).join('\n') + '\n', 'utf-8');
   const productsPath = join(dataDir, 'products.csv');
