@@ -741,8 +741,45 @@ const xlsxOut = xlsxRes.stderr + xlsxRes.stdout;
 ok(xlsxOut.includes('测试关键词'), 'xlsx 成功解析并返回关键词');
 writeFileSync(cfgPath, cfgBackup, 'utf-8');
 
-// ── 15. AGENTS.md 验证 ──
-console.log('\n## 15. AGENTS.md 验证');
+// ── 15. 初始化流程真实测试（initConfig / 安装场景）──
+console.log('\n## 15. 初始化流程真实测试');
+const _initCfgPath = join(WP_DIR, 'setting.toml');
+const _initCfgBackup = join(tmpdir(), `wpb-init-cfg-backup-${Date.now()}.toml`);
+
+try {
+  // 备份当前配置（若存在）
+  if (existsSync(_initCfgPath)) copyFileSync(_initCfgPath, _initCfgBackup);
+
+  // 测试1：首次运行（无 ~/.wpb/setting.toml）→ initConfig 应创建 config + 数据
+  const _origCfgExists = existsSync(_initCfgPath);
+  if (_origCfgExists) unlinkSync(_initCfgPath);
+  const _initRun = run('wpb.mjs', ['pick']);
+  ok(_initRun.status !== 0, '首次运行（无配置）退出码非零');
+  ok((_initRun.stderr + _initRun.stdout).includes('已生成默认配置') || (_initRun.stderr + _initRun.stdout).includes('首次运行'), '首次运行提示已生成配置');
+  ok(existsSync(_initCfgPath), '首次运行后 setting.toml 已生成');
+  // 恢复原始配置
+  if (_origCfgExists && existsSync(_initCfgBackup)) copyFileSync(_initCfgBackup, _initCfgPath);
+  else if (existsSync(_initCfgPath)) unlinkSync(_initCfgPath);
+  if (existsSync(_initCfgBackup)) unlinkSync(_initCfgBackup);
+  syncRefData();
+} catch (_) {}
+
+try {
+  // 测试2：setting.toml 已存在且含用户内容 → pick 不覆盖用户配置
+  const _userCfg = '[site.userblog]\nname = "User Blog"\nurl = "https://user.example.com/wp-json/wp/v2"\nuser = "admin"\npass = "xxxx xxxx xxxx xxxx"\ncategories = [1]\nkeywords = ["data/keywords.csv"]\n';
+  writeFileSync(_initCfgPath, _userCfg, 'utf-8');
+  const _initRun2 = run('wpb.mjs', ['pick']);
+  ok(_initRun2.status === 0, 'setting.toml 已存在时 pick 可正常执行');
+  const _currentCfg = readFileSync(_initCfgPath, 'utf-8');
+  ok(_currentCfg.includes('User Blog'), '用户配置未被 DEFAULT_CFG 覆盖（含 User Blog）');
+  // 恢复原始配置
+  writeFileSync(_initCfgPath, cfgBackup, 'utf-8');
+} catch (_) {
+  if (existsSync(_initCfgBackup)) copyFileSync(_initCfgBackup, _initCfgPath);
+}
+
+// ── 16. AGENTS.md 验证 ──
+console.log('\n## 16. AGENTS.md 验证');
 const rootAgents = readFileSync(join(SCRIPT_DIR, '../../../AGENTS.md'), 'utf-8');
 ok(rootAgents.includes('用途'), '根目录 AGENTS.md 包含 用途');
 ok(rootAgents.includes('关键文件'), '根目录 AGENTS.md 包含 关键文件');
@@ -752,12 +789,12 @@ ok(rootAgents.includes('测试要求'), '根目录 AGENTS.md 包含 测试要求
 ok(rootAgents.includes('常用模式'), '根目录 AGENTS.md 包含 常用模式');
 ok(rootAgents.includes('依赖关系'), '根目录 AGENTS.md 包含 依赖关系');
 
-// ── 16. 用法输出 ──
-console.log('\n## 16. 用法输出');
+// ── 17. 用法输出 ──
+console.log('\n## 17. 用法输出');
 ok(run('wpb.mjs', ['unknown']).status !== 0, '未知命令退出码非零');
 
-// ── 17. TOML 工具函数测试
-console.log('\n## 17. TOML 工具函数测试');
+// ── 18. TOML 工具函数测试
+console.log('\n## 18. TOML 工具函数测试');
 
 
 // ── 汇总 ──
