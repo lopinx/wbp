@@ -1,0 +1,109 @@
+# ~/.wpb/setting.toml
+# ─────────────────────────────────────────────────────────────
+# wpb 配置文件示例（完整字段参考）
+# 复制此文件到 ~/.wpb/setting.toml 并修改对应值即可使用
+# ─────────────────────────────────────────────────────────────
+#
+# 命令一览：
+#   wpb pick              — 随机选取关键词 + 输出上下文 JSON（供 AI 撰写新文章）
+#   wpb fetch <URL>       — 拉取已发布文章原文（供 AI 改写更新，仅接受文章 URL）
+#   wpb publish <file>    — 读取草稿 JSON 并发布（含 postId 时走更新路径，否则新建）
+#   wpb install           — 检测本地 AI CLI 并创建命令文件
+#
+# 更新工作流：wpb fetch <URL> → AI 改写（草稿保留 postId + site）→ wpb publish <draft>
+# 多站点安全：fetch 按 URL 域名匹配站点（不随机）；更新路径按草稿 site 字段绑定站点
+
+# ══════════════════════════════════════════════════════════════
+# 站点配置（可配置多个站点，wpb 启动时随机选一个）
+# ══════════════════════════════════════════════════════════════
+[site.myblog]
+
+# 站点的显示名称（仅用于日志，不影响发布）
+name = "BuchMistrz"
+
+# WordPress REST API 端点（去掉 /wp-json 之前的部分，保留 /wp-json/wp/v2 后缀）
+url = "https://www.buchmistrz.com/wp-json/wp/v2"
+
+# 登录用户名
+user = "admin"
+
+# WordPress 应用程序密码（Application Password）
+# 获取方式：WordPress 后台 → 用户 → 个人资料 → 应用程序密码
+# 填写格式：四个单词用空格分隔（如 "xxxx xxxx xxxx xxxx"）
+pass = "xxxx xxxx xxxx xxxx"
+
+# 发布分类（支持数字 ID 或名称字符串，可填多个）
+# 数字 ID 更稳定，名称会在首次运行时自动查找或创建
+categories = [8603, "Disposable Vape", "E-cigarette"]
+
+# ══════════════════════════════════════════════════════════════
+# 数据文件路径（相对于 ~/.wpb/ 目录；安装时自动复制到 ~/.wpb/data/）
+# ══════════════════════════════════════════════════════════════
+
+# 关键词列表（必填，支持 .csv / .txt / .xlsx / .xls / https:// 链接）
+# CSV 第一行须为表头，工具会读取表头后的每一行作为关键词
+# https 链接支持 Google Sheets 发布地址
+keywords = [
+  "data/keywords.csv",
+  # "https://docs.google.com/spreadsheets/d/e/.../pub?output=csv",  # 也支持在线表格
+]
+
+# 产品数据（可选，用于丰富文章内容；不支持则跳过）
+# 可填字符串或数组（数组时工具随机选一个文件读取）
+# CSV 表头示例：name,brand,puffs,price,desc
+products = "data/products.csv"
+
+# 写作指令（可选，AI 根据此模板生成内容）
+# 可填字符串或数组（数组时工具随机选一个文件读取）
+prompts = "data/prompts.md"
+
+# 扩展知识文件（可选，辅助 AI 补充专业内容）
+# 支持数组，可引用多个知识文件
+extensions = [
+  "data/extensions/wiedza.md",
+]
+
+# ══════════════════════════════════════════════════════════════
+# 图片配置（选填，四种模式选其一）
+# 不配置 cdn 节点 → 图片自动上传到 WordPress 媒体库
+# ══════════════════════════════════════════════════════════════
+
+# ── 模式 1：S3 兼容对象存储 ──────────────────────────────────
+# 从 S3 存储桶拉取图片 URL 列表，混排到文章段落之间
+#[site.myblog.cdn]
+#mode = "s3"
+#bucket = "my-bucket"               # 存储桶名称（必填）
+#region = "us-east-1"               # AWS 区域（必填）
+#accessKeyId = "AKIA..."            # AWS Access Key ID（必填）
+#secretAccessKey = "..."            # AWS Secret Access Key（必填）
+#prefix = "images/"                 # 仅列出该前缀下的对象（可选，默认列出全部）
+#endpoint = "https://s3.us-east-1.qiniucs.com"  # 自定义 S3 兼容端点（可选，留空用 AWS 原生地址）
+#domain = "cdn.example.com"         # 自定义图片 URL 域名前缀（可选，留空用 endpoint）
+#
+# 支持的服务商：Amazon S3、Cloudflare R2、七牛 Kodo、MinIO、Ceph、阿里云 OSS 等
+
+# ── 模式 2：图片搜索（Serper.dev） ────────────────────────
+# 根据文章关键词和标题，调用 Serper.dev 搜索图片并混排
+# 需要配合 cdn.mode = "search"
+#[site.myblog.cdn]
+#mode = "search"
+#
+#[site.myblog.images]
+#keys = [
+#  "serper-dev-api-key-1",           # Serper.dev API Key（必填，支持多 key 随机轮询）
+#  "serper-dev-api-key-2",
+#]
+#gl = "pl"                          # 地理位置代码，默认 "pl"（波兰）
+#hl = "pl"                          # 语言代码，默认 "pl"
+#tbs = "qdr:w"                      # 时间范围过滤器，默认 "qdr:w"（过去一周）
+#                                   # 可选值：qdr:d（过去24小时）/ qdr:w（过去一周）/ qdr:m（过去一月）/ qdr:y（过去一年）
+#query = "固定搜索词"                # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
+#                                   # 留空则自动使用标签+标题组合搜索
+
+# ── 模式 3：CDN 直连 ────────────────────────────────────────
+# 文章已包含图片 URL，保持原样不做混排处理
+#[site.myblog.cdn]
+#mode = "cdn"
+
+# ── 模式 4：无 cdn 节点（默认） ────────────────────────────
+# 不配置 cdn 节点时，工具会尝试将文章中的外链图片上传到 WordPress 媒体库
