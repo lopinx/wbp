@@ -4,7 +4,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-200%2F200%20passing-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-223%2F223%20passing-brightgreen)](#)
 
 ---
 
@@ -101,8 +101,8 @@ wpb pick
     "images": { "gl": "pl", "hl": "pl", "tbs": "qdr:w" }
   },
   "keyword": "best disposable vape 2024",
-  "keywordRow": { "keyword": "best disposable vape 2024", "volume": "12000", "cpc": "0.45" },
-  "products": [{ "name": "Elf Bar BC5000", "price": "24.99", "desc": "5000 puffs disposable vape" }],
+  "keywordRow": ["best disposable vape 2024", "12000", "0.45"],
+  "products": [["Elf Bar BC5000", "Elf Bar", "5000", "24.99", "5000 puffs disposable vape"]],
   "prompts": "# 写作指令\n\n...",
   "extensions": "# 扩展知识\n\n..."
 }
@@ -146,10 +146,10 @@ wpb publish <草稿文件路径>
 
 发布流程自动执行以下步骤：
 
-1. **去重检查**：搜索 WordPress 中是否已有相同标题的文章，重复则拒绝发布
-2. **质量检查**：验证词数、段落、H3、标题长度、摘要长度、标签数量、失效链接（不通过则拒绝）
-3. **分类/标签创建**：自动在 WordPress 中创建不存在的分类和标签
-4. **图片处理**：根据配置的 `cdn.mode` 处理图片（见下方「图片模式」一节）
+1. **去重检查 + 质量检查**：并行执行——搜索 WordPress 中是否已有相同标题的文章（重复则拒绝），同时验证词数、段落、H3、标题长度、摘要长度、标签数量、失效链接（不通过则拒绝）
+2. **分类解析**：将配置的分类（数字 ID 或名称）解析为 WordPress 分类 ID，自动创建不存在的分类
+3. **图片处理**：根据配置的 `cdn.mode` 处理图片（见下方「图片模式」一节）
+4. **标签创建**：自动在 WordPress 中创建不存在的标签
 5. **发布文章**：通过 WordPress REST API 创建已发布状态的文章
 
 ---
@@ -410,7 +410,7 @@ flowchart TD
 |------|------|------|----------|
 | **S3 兼容** | `mode = "s3"` | 从 S3 存储桶列出图片，随机选取混排插入文章段落间 | 已有图片库，图片质量可控 |
 | **图片搜索** | `mode = "search"` + `[images]` | 调用 Serper.dev API 搜索关键词相关图片，随机选取混排 | 无图片库，需要自动配图 |
-| **CDN 直传** | `mode = "cdn"` + `domain` | 保留文章中的远程图片 URL 不变 | 图片已托管在外部 CDN |
+| **CDN 直传** | `mode = "cdn"` | 保留文章中的远程图片 URL 不变 | 图片已托管在外部 CDN |
 | **媒体库** | 不配置 `[site.<slug>.cdn]` | 下载文章中所有外部图片，上传到 WordPress 媒体库并替换 URL | 最简单模式，无需额外配置 |
 
 ### S3 模式说明
@@ -452,12 +452,11 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["wpb publish"] --> B["去重检查"]
-    B -->|重复| C["❌ 拒绝发布"]
-    B -->|通过| D["质量检查"]
-    D -->|不通过| C
-    D -->|通过| E["分类/标签创建"]
-    E --> F["图片处理"]
+    A["wpb publish"] --> B["去重 + 质量检查\n（并行执行）"]
+    B -->|重复/不通过| C["❌ 拒绝发布"]
+    B -->|通过| D["分类解析"]
+    D --> E["图片处理"]
+    E --> F["标签创建"]
     F --> G["发布文章"]
     G --> H["✅ 发布成功"]
 
