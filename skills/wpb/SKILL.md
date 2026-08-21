@@ -13,10 +13,11 @@ argument-hint: "<任务描述> [数量]"
 # WordPress Publisher Skill
 
 ## Purpose
-跨平台 WordPress 发布 CLI 工具，兼容 11 种 AI 工具（Claude Code、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、小U同学、Cursor、GitHub Copilot、OpenCode、Hermes、ZCode）。工作流：从关键词池随机选取主题 → AI 撰写内容 → 自动混排图片 → 通过 WP REST API 发布。
+跨平台 WordPress 发布 CLI 工具，兼容 11 种 AI 工具（Claude Code、OpenAI Codex、Gemini CLI、Antigravity CLI、OpenClaw、小U同学、Cursor、GitHub Copilot、OpenCode、Hermes、ZCode）。工作流：从关键词池随机选取主题 → AI 撰写内容 → 自动混排图片 → 通过 WP REST API 发布。支持通过 `wpb fetch` 拉取已发布文章并改写更新。
 
 ## When to Activate
 - 用户说 "发布文章"、"写博客"、"publish"、"wordpress"
+- 用户说 "更新文章"、"改写文章"、"刷新旧文"
 - 需要自动生成并发布 WordPress 文章
 
 ## Workflow
@@ -82,7 +83,9 @@ wpb pick
   "title": "文章标题",
   "excerpt": "文章摘要",
   "content": "<p>HTML正文内容</p><h3>小标题</h3><p>...</p>",
-  "tags": ["标签1", "标签2", "标签3"]
+  "tags": ["标签1", "标签2", "标签3"],
+  "postId": 123,          // 可选，更新已有文章时必填（由 wpb fetch 输出）
+  "site": "myblog"        // 可选，多站点更新时必填（由 wpb fetch 输出）
 }
 
 # 发布
@@ -91,13 +94,37 @@ wpb publish <草稿文件路径>
 
 发布命令会自动执行以下流程：
 1. 验证草稿字段完整性（`title`、`content`、`excerpt` 必填）
-2. 去重检查：搜索 WordPress 是否已有相同标题的文章
+2. 去重检查：搜索 WordPress 是否已有相同标题的文章（更新时排除自身）
 3. 质量检查：验证词数（≥5000）、段落（≥10）、H3 标题（≥3）、标题/摘要长度、标签数量（3-10）、失效链接等（不通过则拒绝发布）
 4. 自动创建不存在的分类和标签
 5. 图片处理：根据配置的图片模式（S3/搜索/CDN/媒体库）处理图片
-6. 通过 WP REST API 发布文章
+6. 通过 WP REST API 发布文章（草稿含 `postId` 时走更新路径，否则新建）
 
 > **提示**：质量检查包含硬性阈值（如词数、段落数、H3 数量等），文章需满足这些要求才能发布。发布前如有警告信息（如内链不足、关键词命中不足），可酌情补充内容后重新发布。
+
+### 4. 更新已存在文章
+
+当需要更新（改写/优化）已发布的站内文章时：
+
+```bash
+# 1. 拉取原文（仅接受文章 URL，不接受 ID）
+wpb fetch <文章URL>
+```
+
+`wpb fetch` 从 URL 的域名自动匹配配置站点（多站点场景下不随机选取），输出包含以下字段的 JSON：
+- `postId`：文章 ID（保存草稿时**必须保留**此字段）
+- `site`：站点名（保存草稿时**必须保留**此字段，多站点下 publish 据此绑定站点）
+- `title`、`excerpt`、`content`：文章原始内容（HTML）
+- `tags`、`categories`：原标签和分类名称
+- `instructions`：更新操作指引
+
+```bash
+# 2. AI 基于原文改写，保存草稿 JSON（保留 postId 和 site 字段）
+# 3. 发布（自动检测 postId 走更新路径）
+wpb publish <草稿文件路径>
+```
+
+> **多站点安全**：更新路径绝不随机选站点。草稿含 `site` 字段时按名称精确匹配；无 `site` 且单站点配置时回退使用该站点；无 `site` 且多站点配置时拒绝执行并提示先用 `wpb fetch` 获取完整上下文。
 
 ## 内容要求
 
@@ -133,6 +160,7 @@ wpb publish <草稿文件路径>
 /wpb 发布一篇关于电子烟的文章
 /wpb 发布5篇关于一次性电子烟的文章
 /wpb publish an article about Elf Bar
+/wpb 更新 https://example.com/old-post
 ```
 
 ## 注意事项
@@ -143,3 +171,4 @@ wpb publish <草稿文件路径>
 - 质量检查不通过时，需补充内容后重新发布
 - `wpb publish` 接受任意路径的 JSON 文件，不局限于 `~/.wpb/_draft.json`
 - 运行 `wpb install` 可检测本地 AI CLI 并为已安装的工具创建命令文件（支持 11 种工具）
+- 更新已有文章时，先用 `wpb fetch <URL>` 拉取原文，草稿 JSON 必须保留 `postId` 和 `site` 字段

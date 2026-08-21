@@ -386,6 +386,13 @@ ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
 // s3List 必填字段校验（bucket/region，endpoint 配置时豁免）
 ok(src.includes('S3 配置缺少 bucket'), 's3List 校验 bucket 必填');
 ok(src.includes('S3 配置缺少 region'), 's3List 校验 region 必填');
+// s3List endpoint 配置时 region 兜底为 us-east-1（防止 createHmac 收到 undefined 抛 TypeError）
+ok(src.includes("region: cfgRegion = endpoint ? 'us-east-1' : undefined"), 's3List endpoint 配置时 region 兜底');
+// loadProducts/loadPromptDoc/loadExtDocs 加 try/catch 错误保护（单个加载失败不影响整体）
+ok(src.includes('产品文件加载失败'), 'loadProducts 失败时降级返回空数组');
+ok(src.includes('写作指令加载失败'), 'loadPromptDoc 失败时降级返回空字符串');
+ok(src.includes('扩展知识加载失败'), 'loadExtDocs 单个失败时跳过不影响整体');
+ok(src.includes('parts.filter(Boolean).join'), 'loadExtDocs 过滤空值后拼接');
 // 文件名清理支持拉丁扩展补充区（波兰语带附加符号字符）
 ok(src.includes('\\u0100-\\u017F'), '文件名清理保留波兰语带附加符号字符');
 ok(src.includes('\\u4e00-\\u9fff'), '文件名清理保留中日韩字符');
@@ -457,6 +464,87 @@ ok(src.includes("src=[\"']([^\"']+)[\"']"), 'uploadExternalImages img src 正则
 ok(src.includes('isUrl(p)'), 'prompts 支持 URL 路径');
 ok(src.includes('isUrl(ep)'), 'extensions 支持 URL 路径');
 
+// ── 10b. fetch 命令与 publish 更新路径 ──
+console.log('\n## 10b. fetch 命令与 publish 更新路径');
+// 用法字符串含 fetch
+ok(src.includes('用法: wpb [pick|fetch <url>|publish <file>|install]'), '用法字符串含 fetch');
+// 白名单含 fetch
+ok(/'pick', 'fetch', 'publish'/.test(src), '命令白名单含 fetch');
+// fetch 分支存在
+ok(src.includes("if (cmd === 'fetch')"), 'main 含 fetch 分支');
+// fetch 仅接受 URL，不接受 ID
+ok(src.includes("fetch 参数必须是 http(s) URL"), 'fetch 拒绝非 URL 参数');
+// fetch 无参数时提示用法
+ok(src.includes('用法: wpb fetch <文章URL>'), 'fetch 无参数提示用法');
+// 站点 origin 匹配（多站点安全：按 URL 域名精确匹配，不随机选）
+ok(src.includes('siteOriginOf'), 'siteOriginOf 辅助函数已定义');
+ok(src.includes('findSiteByOrigin'), 'findSiteByOrigin 按域名匹配站点');
+ok(src.includes('文章 URL 不属于任何已配置站点'), 'fetch origin 未匹配时拒绝');
+// slug 定位 + link 精确比对兜底
+ok(src.includes('posts?slug='), 'fetch 按 slug 定位文章');
+ok(src.includes('posts?search='), 'fetch slug 无结果时回退搜索');
+ok(src.includes('p.link'), 'fetch 搜索兜底精确比对 link');
+// context=edit 取 raw 字段
+ok(src.includes('context=edit'), 'fetch 用 context=edit 取 raw 内容');
+// termNames 反查术语名称
+ok(src.includes('termNames'), 'termNames 反查 tags/categories 名称');
+ok(src.includes('include='), 'termNames 用 include 参数反查');
+// fetch 输出 postId/site/instructions 字段
+ok(src.includes('postId: full.id'), 'fetch 输出 postId');
+ok(src.includes('site: siteName'), 'fetch 输出 site 名（字符串，非对象）');
+ok(src.includes('instructions'), 'fetch 输出 instructions 字段');
+// validateDraft 校验 postId 正整数 + site 字符串
+ok(src.includes('postId 必须是正整数'), 'validateDraft 校验 postId 正整数');
+ok(src.includes('site 必须是字符串'), 'validateDraft 校验 site 字符串');
+// checkDuplicate 加 excludeId 参数（更新时排除自身）
+ok(src.includes('excludeId = 0'), 'checkDuplicate 加 excludeId 参数');
+ok(src.includes('p.id !== excludeId'), 'checkDuplicate 排除指定 ID');
+// 更新路径：draft.postId 存在时走 POST 更新
+ok(src.includes('draft.postId !== undefined'), 'publish 检测 postId 判断更新路径');
+ok(src.includes('posts/${draft.postId}'), '更新走 posts/{id} 路径');
+ok(src.includes("method: 'POST'"), '更新用 POST（非 PUT，兼容性最好）');
+// 更新路径站点绑定（多站点安全：draft.site 指定，无则单站点回退，多站点拒绝）
+ok(src.includes('多站点环境下更新文章需在草稿中指定 site 字段'), '多站点无 site 绑定时拒绝更新');
+ok(src.includes('草稿中指定的站点'), 'draft.site 不匹配时明确报错');
+// 更新时 categories 用 draft.categories，无值省略
+ok(src.includes('draft.categories ? await resolveCategoryIds'), '更新 categories 有值则解析');
+ok(src.includes('if (catIds) body.categories = catIds'), '更新无 categories 时省略（保留原分类）');
+// 更新成功日志含站点名
+ok(src.includes('更新成功:'), '更新成功日志文案');
+ok(src.includes('[站点:'), '更新日志含站点名');
+// 公共函数 processImagesAndTags 消除重复
+ok(src.includes('processImagesAndTags'), 'processImagesAndTags 公共函数已提取');
+// checkDuplicate 仍保留 title.raw/rendered 比较（兼容 WordPress 格式化标题）
+ok(src.includes('p.title.raw === title || p.title.rendered === title'), 'checkDuplicate 保留 title.raw/rendered 比较');
+// validateDraft postId/site 校验单测
+{
+  const vdSrc = src.match(/const validateDraft = d => \{[\s\S]*?return \{ valid: e\.length === 0, errors: e \}; \}/);
+  if (!vdSrc) error('validateDraft 函数提取失败（10b）');
+  else {
+    const vd = eval('(function() { ' + vdSrc[0] + '; return validateDraft; })()');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', postId: 123, site: 'myblog' }).valid === true, 'validateDraft 合法 postId+site 通过');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', postId: -1 }).valid === false, 'validateDraft 负 postId 拒绝');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', postId: 1.5 }).valid === false, 'validateDraft 非整数 postId 拒绝');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', postId: 'abc' }).valid === false, 'validateDraft 字符串 postId 拒绝');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', site: 42 }).valid === false, 'validateDraft 非字符串 site 拒绝');
+  }
+}
+// findSiteByOrigin 单测（纯函数，eval 提取；需注入 siteOriginOf 依赖）
+// 注：未匹配时 die() 调用 process.exit，无法在进程内 try/catch，故未匹配路径仅做源码断言
+{
+  const fnSrc = src.match(/function findSiteByOrigin\(sites, origin\)[\s\S]*?\n}/);
+  if (!fnSrc) error('findSiteByOrigin 函数提取失败');
+  else {
+    const siteOriginOf = url => (String(url).match(/^https?:\/\/[^/]+/i) || [''])[0];
+    const findSiteByOrigin = eval('(function() { var siteOriginOf = arguments[0]; ' + fnSrc[0] + '; return findSiteByOrigin; })')(siteOriginOf);
+    const sites = { a: { url: 'https://a.com/wp-json/wp/v2' }, b: { url: 'https://b.com/wp-json/wp/v2' } };
+    ok(findSiteByOrigin(sites, 'https://a.com')[0] === 'a', 'findSiteByOrigin 命中 a');
+    ok(findSiteByOrigin(sites, 'https://b.com')[0] === 'b', 'findSiteByOrigin 命中 b');
+  }
+}
+// findSiteByOrigin 多匹配时拒绝（未匹配路径已在上方断言，因 die 会退出进程）
+ok(src.includes('多个站点配置了同一域名'), 'findSiteByOrigin 多匹配时拒绝');
+
 // ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
 console.log('\n## 11. 安装逻辑');
 ok(src.includes('async function doInstall'), 'wpb.mjs 包含 doInstall 安装函数');
@@ -483,6 +571,11 @@ ok(existsSync(join(SCRIPT_DIR, '../references/data', 'keywords.csv')), 'keywords
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'products.csv')), 'products.csv 存在');
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'prompts.md')), 'prompts.md 存在');
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'extensions', 'wiedza.md')), 'wiedza.md 存在');
+// setting-reference.toml 含 fetch/更新工作流说明
+ok(existsSync(join(SCRIPT_DIR, '../references/setting-reference.toml')), 'setting-reference.toml 存在');
+const refToml = readFileSync(join(SCRIPT_DIR, '../references/setting-reference.toml'), 'utf-8');
+ok(refToml.includes('wpb fetch'), 'setting-reference.toml 含 fetch 命令说明');
+ok(refToml.includes('postId'), 'setting-reference.toml 含 postId 更新字段说明');
 
 // ── 13.1 CSV/TXT/XLSX 解析单元测试 ──
 console.log('\n## 13.1 CSV/TXT/XLSX 解析测试 (SheetJS)');

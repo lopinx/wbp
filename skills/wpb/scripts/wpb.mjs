@@ -28,10 +28,12 @@ const HREF_RE = /href="(https?:\/\/[^"]+)"/g;
 const asArray = x => Array.isArray(x) ? x : [x];
 const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 const isUrl = p => /^https?:\/\//i.test(p);
+// 提取 URL origin（protocol+host），fetch 站点匹配与 checkQuality/uploadExternalImages 复用
+const siteOriginOf = url => (String(url).match(/^https?:\/\/[^/]+/i) || [''])[0];
 // 安全路径：URL 原样返回（由 readTable 远程获取）；绝对路径原样 resolve；相对路径解析到 ~/.wpb 并防越界
 const safePath = p => { if (!p) return null; if (isUrl(p)) return p; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 ~/.wpb: ${p} (解析为 ${a})`); return a; };
 function isValidKey(k) { return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k); }
-const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); return { valid: e.length === 0, errors: e }; };
+const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); if (d.postId !== undefined && (!Number.isInteger(d.postId) || d.postId <= 0)) e.push('postId 必须是正整数'); if (d.site !== undefined && typeof d.site !== 'string') e.push('site 必须是字符串'); return { valid: e.length === 0, errors: e }; };
 
 // ── 迷你 TOML 解析器 ──
 function parseToml(t) {
@@ -142,9 +144,10 @@ async function fetchWithRetry(url, opts, retries = 3) {
 
 // ── S3 列表 ──
 async function s3List(cfg, limit) {
-  const { endpoint, region, bucket, prefix = '' } = cfg;
+  const { endpoint, region: cfgRegion = endpoint ? 'us-east-1' : undefined, bucket, prefix = '' } = cfg;
   if (!bucket && !endpoint) throw new Error('S3 配置缺少 bucket（且未配置 endpoint）');
-  if (!region && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
+  if (!cfgRegion && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
+  const region = cfgRegion;
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID || cfg.accessKeyId || cfg.key;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || cfg.secretAccessKey || cfg.secret;
   if (!accessKeyId || !secretAccessKey) throw new Error('S3 凭据未配置（accessKeyId/secretAccessKey 或环境变量 AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY）');
@@ -197,7 +200,7 @@ async function uploadImage(site, imgUrl) {
 function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.env.WP_PASSWORD || site.pass}`).toString('base64'); }
 async function uploadExternalImages(site, html) {
   const urls = [...new Set([...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]))];
-  const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
+  const siteOrigin = siteOriginOf(site.url);
   const external = urls.filter(url => !(siteOrigin && url.startsWith(siteOrigin)));
   if (!external.length) return {};
   // 并发上传外部图片，限制并发数 5，避免同时发起过多请求
@@ -234,9 +237,43 @@ async function findOrCreate(site, type, name, cache) {
   cache.set(key, item.id); return item.id;
 }
 
-async function checkDuplicate(site, title) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.title && (p.title.raw === title || p.title.rendered === title)) || null; }
+async function checkDuplicate(site, title, excludeId = 0) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.id !== excludeId && p.title && (p.title.raw === title || p.title.rendered === title)) || null; }
 
 async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats).map(c => { const isId = typeof c === 'number' || /^\d+$/.test(String(c)); return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache); })); }
+
+// 图片处理 + 标签创建（更新/创建路径共用，消除重复）
+async function processImagesAndTags(site, content, tags, title) {
+  let finalContent = content; let tagIds = [];
+  if (site.cdn && site.cdn.mode === 'search') { try { const imgs = await searchImages(site.images || {}, tags || [], title); if (imgs.length) finalContent = mixImages(finalContent, imgs); } catch (e) { log('warn', '图片搜索失败:', e.message); } }
+  else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
+  else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
+  if (tags?.length) {
+    const results = await concurrentMap(tags, 5, async (t) => {
+      try { return await findOrCreate(site, 'tags', t, tagCache); }
+      catch (e) { log('warn', `标签创建失败: ${t}`, e.message); return null; }
+    });
+    tagIds = results.filter(r => r !== null);
+  }
+  return { finalContent, tagIds };
+}
+
+// ── 站点匹配与术语反查（fetch / 更新路径共用）──
+function validateSite(siteName, site) {
+  for (const f of ['url', 'user', 'pass', 'categories']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
+  if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
+}
+// 按文章 URL 的域名精确匹配配置站点；更新路径必须显式绑定站点，禁止随机选取
+function findSiteByOrigin(sites, origin) { const hits = Object.entries(sites).filter(([, s]) => siteOriginOf(s.url) === origin); if (!hits.length) die(`文章 URL 不属于任何已配置站点: ${origin}，请检查 setting.toml`); if (hits.length > 1) die(`多个站点配置了同一域名 ${origin}: ${hits.map(([k, s]) => s.name || k).join(', ')}，请合并配置`); return hits[0]; }
+// 按 slug 定位文章；slug 查询无结果时回退关键词搜索并精确匹配 link
+async function findPostBySlug(site, articleUrl, slug) {
+  const bySlug = await wpFetch(site, `posts?slug=${encodeURIComponent(slug)}&status=any&per_page=5`);
+  if (Array.isArray(bySlug) && bySlug.length) return bySlug[0];
+  const bySearch = await wpFetch(site, `posts?search=${encodeURIComponent(slug)}&status=any&per_page=20`);
+  if (Array.isArray(bySearch)) { const hit = bySearch.find(p => p.link && (p.link === articleUrl || p.link === articleUrl.replace(/\/+$/, ''))); if (hit) return hit; }
+  return null;
+}
+// 术语 ID 反查名称（tags/categories 在文章中只存 ID）
+async function termNames(site, type, ids) { if (!ids?.length) return []; const terms = await wpFetch(site, `${type}?include=${ids.join(',')}&per_page=100`); return Array.isArray(terms) ? terms.map(t => t.name) : []; }
 
 // ── NitroPack CDN URL 清理 ──
 // NitroPack 将原始图片 URL 包装为：https://cdn-<sub>.nitrocdn.com/<token>/assets/images/optimized/rev-<hash>/<原始URL>
@@ -300,7 +337,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const h3 = body.match(/<h3[^>]*>/g) || [];
   const checks = [[wordCount < 5000, `词数 ${wordCount} 少于 5000`], [paras.length < 10, `仅有 ${paras.length} 个段落`], [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`], [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`], [!excerpt || excerpt.length < 50, `摘要过短 (${excerpt?.length || 0} 字符)`], [!tags || tags.length < 3, `仅有 ${tags?.length || 0} 个标签`], [tags && tags.length > 10, `标签过多 (${tags.length} 个)`]];
   for (const [c, m] of checks) if (c) issues.push(m);
-  const siteOrigin = (site.url.match(/https?:\/\/[^/]+/) || [''])[0];
+  const siteOrigin = siteOriginOf(site.url);
   // 一次性提取所有 href 链接，复用于内链/外链/死链检测
   const allLinks = [...body.matchAll(HREF_RE)].map(m => m[1]);
   if (siteOrigin) {
@@ -352,10 +389,10 @@ async function doInstall() {
 
   if (existsSync(CFG)) { log('info', '配置文件已存在，跳过生成:', CFG); } else { writeFileSync(CFG, DEFAULT_CFG, 'utf-8'); console.log(`配置文件已生成: ${CFG}（请编辑后使用）`); }
 
-  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（任意目录可用：wpb pick / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（任意目录可用：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
-function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
+function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
 
 function createCommandFile(tool, content) { const { dir } = tool; const filePath = join(homedir(), ...dir, 'wpb', 'SKILL.md'); try { if (!existsSync(dirname(filePath))) mkdirSync(dirname(filePath), { recursive: true }); writeFileSync(filePath, content, 'utf8'); console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`); } catch (e) { console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`); } }
 
@@ -443,29 +480,52 @@ function initConfig() {
 async function main() {
   const cmd = process.argv[2] || 'pick';
   if (cmd === 'install') { await doInstall(); return; }
-  if (cmd === 'init') die('未识别命令 "init"。如需初始化配置请用: wpb install\n用法: wpb [pick|publish <file>|install]');
-  if (!['pick', 'publish'].includes(cmd)) die('用法: wpb [pick|publish <file>|install]');
+  if (cmd === 'init') die('未识别命令 "init"。如需初始化配置请用: wpb install\n用法: wpb [pick|fetch <url>|publish <file>|install]');
+  if (!['pick', 'fetch', 'publish'].includes(cmd)) die('用法: wpb [pick|fetch <url>|publish <file>|install]');
   if (!existsSync(CFG)) { initConfig(); die(`首次运行：已生成默认配置 ${CFG}\n请编辑后重新运行: wpb ${cmd}`); }
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
   if (!siteNames.length) die('未配置任何站点');
+
+  // ── fetch：按 URL origin 匹配站点，拉取已发布文章供改写 ──
+  if (cmd === 'fetch') {
+    const articleUrl = process.argv[3];
+    if (!articleUrl) die('用法: wpb fetch <文章URL>');
+    if (!isUrl(articleUrl)) die('fetch 参数必须是 http(s) URL: ' + articleUrl);
+    const origin = siteOriginOf(articleUrl);
+    const [siteName, site] = findSiteByOrigin(sites, origin);
+    if (!site.name) site.name = siteName;
+    validateSite(siteName, site);
+    const slug = new URL(articleUrl).pathname.split('/').filter(Boolean).pop();
+    if (!slug) die('无法从 URL 提取文章 slug: ' + articleUrl);
+    const post = await findPostBySlug(site, articleUrl, slug);
+    if (!post) die('未找到文章: ' + articleUrl);
+    const full = await wpFetch(site, `posts/${post.id}?context=edit`);
+    const tagNames = await termNames(site, 'tags', full.tags);
+    const catNames = await termNames(site, 'categories', full.categories);
+    console.log(JSON.stringify({ postId: full.id, site: siteName, link: full.link, title: full.title.raw, excerpt: full.excerpt.raw, content: full.content.raw, tags: tagNames, categories: catNames, instructions: '这是已发布文章。改写后保存草稿时必须保留 postId 和 site 字段，wpb publish 将更新该文章而非新建。' }, null, 2));
+    return;
+  }
+
+  // ── pick / publish：随机选站点（保持原有行为）──
   const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; if (!site.name) site.name = siteName;
-  // 站点必填字段校验，提前给出明确错误而非在后续 API 调用中抛晦涩 TypeError
-  for (const f of ['url', 'user', 'pass', 'categories']) if (!site[f]) die(`站点 [site.${siteName}] 缺少必填字段: ${f}`);
-  if (!site.url.includes('/wp-json/wp/v2')) log('warn', `站点 [site.${siteName}] 的 url 不含 /wp-json/wp/v2，WP REST API 调用可能失败`);
+  validateSite(siteName, site);
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean), promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean), extPaths = (site.extensions || []).map(p => safePath(p));
   // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync
   const pathOk = p => p && (isUrl(p) || existsSync(p));
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat()); if (!keywords.length) die('关键词文件为空');
   const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; return readTable(ok[Math.floor(Math.random() * ok.length)]); };
-  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); };
+  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; try { return await readTable(ok[Math.floor(Math.random() * ok.length)]); } catch (e) { log('warn', '产品文件加载失败:', e.message); return []; } };
+  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; try { return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); } catch (e) { log('warn', '写作指令加载失败:', e.message); return ''; } };
   const loadExtDocs = async () => {
     const ok = extPaths.filter(ep => pathOk(ep)); if (!ok.length) return '';
-    // 并发加载扩展文档，限制并发数避免过多请求；保留 --- <filename> --- 分隔格式
-    const parts = await concurrentMap(ok, 5, async (ep) => `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`);
-    return parts.join('');
+    // 并发加载扩展文档，限制并发数避免过多请求；单个加载失败不影响整体，保留 --- <filename> --- 分隔格式
+    const parts = await concurrentMap(ok, 5, async (ep) => {
+      try { return `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
+      catch (e) { log('warn', '扩展知识加载失败:', e.message); return ''; }
+    });
+    return parts.filter(Boolean).join('');
   };
   const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
@@ -479,7 +539,39 @@ async function main() {
   let draft; try { draft = JSON.parse(readFileSync(draftPath, 'utf-8')); } catch (e) { die(`草稿文件 JSON 解析失败: ${e.message}\n文件: ${draftPath}`); }
   const v = validateDraft(draft); if (!v.valid) die('草稿验证失败: ' + v.errors.join('; '));
   const cleanedContent = stripNitroPack(draft.content);
-  // 去重检查与质量检查并行执行（两者无数据依赖），缩短 publish 总耗时
+
+  // 更新路径：draft.postId 存在时走 POST 更新（WP REST 兼容性最好），否则走 POST 创建
+  const isUpdate = draft.postId !== undefined;
+  let targetSite = site, targetSiteName = siteName;
+  if (isUpdate) {
+    if (draft.site) {
+      const named = sites[draft.site];
+      if (!named) die(`草稿中指定的站点 "${draft.site}" 不在配置中，可用站点: ${siteNames.join(', ')}`);
+      targetSite = named; targetSiteName = draft.site;
+      if (!targetSite.name) targetSite.name = targetSiteName;
+      validateSite(targetSiteName, targetSite);
+    } else if (siteNames.length > 1) {
+      die('多站点环境下更新文章需在草稿中指定 site 字段（站点名），请先用 wpb fetch 获取完整草稿上下文');
+    }
+    // 去重排除自身（checkDuplicate 第三个参数）+ 质量检查（同一套硬指标，不放宽）
+    const [dup, q] = await Promise.all([
+      checkDuplicate(targetSite, draft.title, draft.postId),
+      checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], targetSite)
+    ]);
+    if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
+    if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
+    if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
+    // categories：draft 有值则解析，无值省略（WP 保留原分类）
+    const catIds = draft.categories ? await resolveCategoryIds(targetSite, draft.categories) : undefined;
+    const { finalContent, tagIds } = await processImagesAndTags(targetSite, cleanedContent, draft.tags, draft.title);
+    const body = { title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', tags: tagIds };
+    if (catIds) body.categories = catIds;
+    const res = await wpFetch(targetSite, `posts/${draft.postId}`, { method: 'POST', body: JSON.stringify(body) });
+    log('info', `更新成功: ${res.link} (ID: ${res.id}) [站点: ${targetSiteName}]`);
+    return;
+  }
+
+  // ── 创建路径（原有逻辑不变）──
   const [dup, q] = await Promise.all([
     checkDuplicate(site, draft.title),
     checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)
@@ -488,18 +580,7 @@ async function main() {
   if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
   if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
   const catIds = await resolveCategoryIds(site, site.categories);
-  let finalContent = cleanedContent; let tagIds = [];
-  if (site.cdn && site.cdn.mode === 'search') { try { images = await searchImages(site.images || {}, draft.tags || [], draft.title); } catch (e) { log('warn', '图片搜索失败:', e.message); } if (images.length) finalContent = mixImages(finalContent, images); }
-  else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
-  else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
-  if (draft.tags?.length) {
-    // 并发创建标签，限制并发数避免过多请求；失败标签记录警告后跳过
-    const results = await concurrentMap(draft.tags, 5, async (t) => {
-      try { return await findOrCreate(site, 'tags', t, tagCache); }
-      catch (e) { log('warn', `标签创建失败: ${t}`, e.message); return null; }
-    });
-    tagIds = results.filter(r => r !== null);
-  }
+  const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
   const res = await wpFetch(site, 'posts', { method: 'POST', body: JSON.stringify({ title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', categories: catIds, tags: tagIds }) });
   log('info', `发布成功: ${res.link} (ID: ${res.id})`);
 }
