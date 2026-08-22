@@ -82,20 +82,37 @@ function parseToml(t) {
       else if (c === ']') depth = Math.max(0, depth - 1);
       kept += c;
     }
-    if (depth === 0 && !kept.trim()) { if (!buf) continue; }
+    if (depth === 0 && !kept.trim()) continue;
     buf = buf ? buf + ' ' + kept.trim() : kept;
     if (depth === 0) { if (buf.trim()) logical.push(buf); buf = ''; }
   }
   if (buf.trim()) logical.push(buf);
   for (const l of logical) {
-    const v = l.trim(); if (!v || v.startsWith('#')) continue;
+    const v = l.trim();
     const m = v.match(/^\[([^\]]+)\]$/); if (m) { sectionPath = m[1].split('.'); continue; }
     const kv = v.match(/^([\w.]+)\s*=\s*(.+)$/); if (!kv) continue;
     let val = kv[2].trim(); let inStr = false, strQuote = '', escaped = false;
     for (let i = 0; i < val.length; i++) { const c = val[i]; if (escaped) { escaped = false; continue; } if (c === '\\') { escaped = true; continue; } if ((c === '"' || c === "'") && !inStr) { inStr = true, strQuote = c; } else if (c === strQuote && inStr) { inStr = false, strQuote = ''; } if (c === '#' && !inStr) { val = val.slice(0, i).trimEnd(); break; } }
     if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
     else if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1).replace(/\\'/g, "'").replace(/\\\\/g, '\\');
-    else if (val.startsWith('[') && val.endsWith(']')) { const arrStr = val.slice(1, -1).trim(); if (arrStr) { const arr = []; let current = '', inQuote = false, q = ''; for (let i = 0; i < arrStr.length; i++) { const c = arrStr[i]; if (c === '"' || c === "'") { if (!inQuote) { inQuote = true, q = c; } else if (c === q) { inQuote = false, q = ''; } current += c; } else if (c === ',' && !inQuote) { arr.push(current.trim().replace(/^["']|["']$/g, '')); current = ''; } else current += c; } if (current.trim()) arr.push(current.trim().replace(/^["']|["']$/g, '')); val = arr; } else val = []; }
+    else if (val.startsWith('[') && val.endsWith(']')) {
+      const arrStr = val.slice(1, -1).trim();
+      if (arrStr) {
+        // 剥引号后按引号类型反转义，与标量字符串处理一致（此前数组元素保留转义序列不变）
+        const unquote = s => { const m = s.trim().match(/^(["'])([\s\S]*)\1$/); if (!m) return s.trim(); return m[1] === '"' ? m[2].replace(/\\"/g, '"').replace(/\\\\/g, '\\') : m[2].replace(/\\'/g, "'").replace(/\\\\/g, '\\'); };
+        const arr = []; let current = '', inQuote = false, q = '', esc = false;
+        for (let i = 0; i < arrStr.length; i++) {
+          const c = arrStr[i];
+          if (esc) { esc = false; current += c; continue; }
+          if (inQuote && c === '\\') { esc = true; current += c; continue; }
+          if (c === '"' || c === "'") { if (!inQuote) { inQuote = true, q = c; } else if (c === q) { inQuote = false, q = ''; } current += c; }
+          else if (c === ',' && !inQuote) { arr.push(unquote(current)); current = ''; }
+          else current += c;
+        }
+        if (current.trim()) arr.push(unquote(current));
+        val = arr;
+      } else val = [];
+    }
     else if (val === 'true') val = true; else if (val === 'false') val = false; else if (/^-?\d+$/.test(val)) val = Number(val);
     const keyPath = sectionPath.concat(kv[1].split('.'));
     for (const pk of keyPath) if (!isValidKey(pk)) throw new Error(`无效的 TOML 键: ${pk}，只能包含字母、数字和下划线，且必须以字母或下划线开头`);
@@ -219,16 +236,15 @@ async function s3List(cfg, limit) {
   const { endpoint, region: cfgRegion = endpoint ? 'us-east-1' : undefined, bucket, prefix = '' } = cfg;
   if (!bucket && !endpoint) throw new Error('S3 配置缺少 bucket（且未配置 endpoint）');
   if (!cfgRegion && !endpoint) throw new Error('S3 配置缺少 region（且未配置 endpoint）');
-  const region = cfgRegion;
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID || cfg.accessKeyId || cfg.key;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || cfg.secretAccessKey || cfg.secret;
   if (!accessKeyId || !secretAccessKey) throw new Error('S3 凭据未配置（accessKeyId/secretAccessKey 或环境变量 AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY）');
-  const base = endpoint ? endpoint.replace(/\/$/, '') : `https://${bucket}.s3.${region}.amazonaws.com`;
+  const base = endpoint ? endpoint.replace(/\/$/, '') : `https://${bucket}.s3.${cfgRegion}.amazonaws.com`;
   const host = new URL(base).host;
   const date = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   const sign = (msg, key) => createHmac('sha256', key).update(msg).digest('hex');
   const kDate = sign(date.slice(0, 8), 'AWS4' + secretAccessKey);
-  const kRegion = sign(region, kDate);
+  const kRegion = sign(cfgRegion, kDate);
   const kService = sign('s3', kRegion);
   const kSigning = sign('aws4_request', kService);
   const emptyHash = createHash('sha256').update('').digest('hex');
@@ -236,7 +252,7 @@ async function s3List(cfg, limit) {
   // SigV4：stringToSign 第 4 行必须是 canonical request 的 SHA-256（此前误用空载荷哈希，
   // 导致 method/path/query 均未参与签名，真实 AWS 返回 403 SignatureDoesNotMatch）
   const canonicalReq = 'GET\n/\n' + query + '\nhost:' + host + '\nx-amz-content-sha256:' + emptyHash + '\nx-amz-date:' + date + '\n\nhost;x-amz-content-sha256;x-amz-date\n' + emptyHash;
-  const scope = date.slice(0, 8) + '/' + region + '/s3/aws4_request';
+  const scope = date.slice(0, 8) + '/' + cfgRegion + '/s3/aws4_request';
   const stringToSign = 'AWS4-HMAC-SHA256\n' + date + '\n' + scope + '\n' + createHash('sha256').update(canonicalReq).digest('hex');
   const auth = 'AWS4-HMAC-SHA256 Credential=' + accessKeyId + '/' + scope + ', SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=' + sign(stringToSign, kSigning);
   const res = await fetchWithRetry(base + '/?' + query, { headers: { host, 'x-amz-date': date, 'x-amz-content-sha256': emptyHash, authorization: auth } });
@@ -389,8 +405,8 @@ function mixImages(html, images) {
   const re = new RegExp(PARA_RE.source, 'g');
   while ((m = re.exec(html)) !== null) paras.push({ text: m[0], start: m.index, end: m.index + m[0].length });
   if (paras.length < 2) return html;
+  // 顶部已保证 images 非空且 paras ≥ 2，slice 结果必非空
   const used = images.slice(0, paras.length - 1);
-  if (!used.length) return html;
   // 计算可用插入点：段落 i 与 i+1 之间（即段落 i 之后）
   // 排除首段之前（i=-1 不生成）和尾段之后（i=paras.length-1 不生成）
   const slots = [];
@@ -409,7 +425,7 @@ function mixImages(html, images) {
   let last = 0;
   let si = 0;
   for (let i = 0; i < used.length && si < slots.length; i++) {
-    const pos = slots[Math.min(si, slots.length - 1)];
+    const pos = slots[si];
     const a = escAttr(imgAlt(used[i]));
     parts.push(html.slice(last, pos));
     parts.push(`<figure><img src="${escAttr(used[i])}" alt="${a}" title="${a}" loading="lazy" style="max-width:100%;height:auto;border-radius:8px;margin:1em 0"></figure>`);
