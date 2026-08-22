@@ -10,8 +10,9 @@ import { createHash } from 'crypto';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_DIR = join(__dirname, '..');
 const REF_DATA_DIR = join(SCRIPT_DIR, '../references/data'); // 与第 13 节数据文件检查一致：skills/wpb/references/data
-const HOME = homedir(); // 与 install.mjs 一致：os.homedir() 在三平台稳定，避免 HOME 被改写导致目录不一致
-const WP_DIR = join(HOME, '.wpb');
+// 测试用临时项目目录，findWpDir() 从子进程 CWD 向上查找 .wpb
+const TEST_PROJECT = mkdtempSync(join(tmpdir(), 'wpb-test-'));
+const WP_DIR = join(TEST_PROJECT, '.wpb');
 
 function log(level, ...args) {
   const colors = {
@@ -26,7 +27,10 @@ function log(level, ...args) {
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log(`  ✓ ${msg}`); } else { fail++; console.log(`  ✗ ${msg}`); } }
 function error(msg) { fail++; console.log(`  ✗ ${msg}`); }
-function run(cmd, args, opts) { return spawnSync(process.execPath, [cmd, ...args], { cwd: SCRIPT_DIR, encoding: 'utf-8', ...opts }); }
+function run(cmd, args, opts) {
+  const script = cmd === 'wpb.mjs' ? join(SCRIPT_DIR, 'wpb.mjs') : cmd;
+  return spawnSync(process.execPath, [script, ...args], { cwd: TEST_PROJECT, encoding: 'utf-8', ...opts });
+}
 
 // ── 1. 语法检查 ──
 console.log('## 1. 语法检查');
@@ -36,8 +40,8 @@ ok(run('--check', [join(__dirname, 'selftest.mjs')]).status === 0, 'selftest.mjs
 // ── 2. 安装数据 ──
 console.log('\n## 2. 安装数据');
 
-// 准备测试数据：把仓库 references/data 复制到 ~/.wpb/data
-// pick 的相对路径解析到 ~/.wpb/data；未跑 install 的开发环境会缺数据
+// 准备测试数据：把仓库 references/data 复制到测试项目 .wpb/data
+// pick 的相对路径解析到 .wpb/data；测试用临时项目目录隔离
 function syncRefData() {
   if (!existsSync(REF_DATA_DIR)) return;
   const dst = join(WP_DIR, 'data');
@@ -52,6 +56,7 @@ function syncRefData() {
     }
   }
 }
+mkdirSync(WP_DIR, { recursive: true });
 syncRefData();
 ok(existsSync(join(WP_DIR, 'data', 'keywords.csv')), '测试数据已就位');
 
@@ -607,6 +612,12 @@ ok(/doInstall[\s\S]*?ensureConfig\(\)/.test(src) && /function initConfig[\s\S]*?
 ok(src.includes('命令文件无变化，跳过'), 'createCommandFile 内容相同时跳过写入');
 ok(/createCommandFile[\s\S]*?readFileSync[\s\S]*?===\s*content/.test(src), 'createCommandFile 比较新旧内容后再写入');
 ok(src.includes('function ensureDefaultData'), 'ensureDefaultData 公共函数已提取');
+ok(src.includes('function findWpDir'), 'findWpDir 向上查找 .wpb 目录函数已提取');
+ok(/findWpDir[\s\S]*?setting\.toml/.test(src), 'findWpDir 检测 setting.toml 存在');
+ok(src.includes('WP_DIR = findWpDir()'), 'WP_DIR 由 findWpDir 动态定位');
+ok(src.includes('#keywords =') && src.includes('#products ='), 'DEFAULT_CFG 中 keywords/products 默认注释掉');
+ok(!/writeFileSync\(keywordsPath/.test(src), 'ensureDefaultData 不再生成 keywords.csv');
+ok(!/writeFileSync\(productsPath/.test(src), 'ensureDefaultData 不再生成 products.csv');
 ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wpb.mjs）');
 ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（改为运行时 initConfig）');
 const PKG = readFileSync(join(SCRIPT_DIR, '../../..', 'package.json'), 'utf-8');

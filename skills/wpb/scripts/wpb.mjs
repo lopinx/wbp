@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, writeSync, mkdirSync, readdirSync, statSync, copyFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, writeSync, mkdirSync } from 'fs';
 import { homedir, platform } from 'os';
 import { join, resolve, sep, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -27,7 +27,22 @@ if (platform() === 'win32') {
   try { process.stdout.setDefaultEncoding('utf-8'); process.stderr.setDefaultEncoding('utf-8'); } catch {}
 }
 
-const TIMEOUT_MS = 30000, WP_DIR = join(homedir(), '.wpb'), CFG = join(WP_DIR, 'setting.toml');
+// 从 CWD 向上查找含 setting.toml 的 .wpb 目录；未找到则在 CWD 创建（类 git .git 目录）
+function findWpDir() {
+  let dir = process.cwd();
+  while (true) {
+    const candidate = join(dir, '.wpb');
+    if (existsSync(join(candidate, 'setting.toml'))) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const wpDir = join(process.cwd(), '.wpb');
+  if (!existsSync(wpDir)) mkdirSync(wpDir, { recursive: true });
+  return wpDir;
+}
+
+const TIMEOUT_MS = 30000, WP_DIR = findWpDir(), CFG = join(WP_DIR, 'setting.toml');
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOG_LEVEL = process.env.WPB_LOG_LEVEL || 'info';
 const LVL_IDX = { debug: 0, info: 1, warn: 2, error: 3 };
@@ -40,8 +55,8 @@ const isAbsPath = p => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
 const isUrl = p => /^https?:\/\//i.test(p);
 // 提取 URL origin（protocol+host），fetch 站点匹配与 checkQuality/uploadExternalImages 复用
 const siteOriginOf = url => (String(url).match(/^https?:\/\/[^/]+/i) || [''])[0];
-// 安全路径：URL 原样返回（由 readTable 远程获取）；绝对路径原样 resolve；相对路径解析到 ~/.wpb 并防越界
-const safePath = p => { if (!p) return null; if (isUrl(p)) return p; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 ~/.wpb: ${p} (解析为 ${a})`); return a; };
+// 安全路径：URL 原样返回（由 readTable 远程获取）；绝对路径原样 resolve；相对路径解析到 .wpb 并防越界
+const safePath = p => { if (!p) return null; if (isUrl(p)) return p; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 .wpb: ${p} (解析为 ${a})`); return a; };
 function isValidKey(k) { return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k); }
 const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); if (d.postId !== undefined && (!Number.isInteger(d.postId) || d.postId <= 0)) e.push('postId 必须是正整数'); if (d.site !== undefined && typeof d.site !== 'string') e.push('site 必须是字符串'); return { valid: e.length === 0, errors: e }; };
 
@@ -440,9 +455,9 @@ const AGENTS_SKILLS = { claude: { name: 'Claude Code', dir: ['.claude', 'skills'
 
 async function doInstall() {
   console.log('=== WordPress 发布器安装程序 ===\n');
-  const DATA_SRC = join(SCRIPT_DIR, '../references/data');
-  const DATA_DST = join(WP_DIR, 'data');
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
+  const DATA_DST = join(WP_DIR, 'data');
+  if (!existsSync(DATA_DST)) mkdirSync(DATA_DST, { recursive: true });
 
   // 用户手动运行 `wpb install`（TTY）时走完整 AI CLI 检测 + 命令文件创建流程；
   // 无 postinstall 钩子；npm 全局安装时用 symlink，脚本在 symlink 目标被清理后无法执行
@@ -453,12 +468,10 @@ async function doInstall() {
 
   console.log('=== 全局命令 ==='); console.log('✓ wpb 命令已通过 npm 全局安装自动注册'); console.log('  升级方式：npm update -g @lopinx/wpb');
 
-  if (existsSync(DATA_SRC)) { const REF_FILES = ['keywords.csv', 'products.csv', 'prompts.md']; const REF_DIRS = ['extensions']; const cp = (src, dst) => { if (!existsSync(dst)) mkdirSync(dst, { recursive: true }); for (const f of readdirSync(src)) { const s = join(src, f), d = join(dst, f); if (statSync(s).isDirectory()) { if (REF_DIRS.includes(f)) cp(s, d); } else if (REF_FILES.includes(f) || !existsSync(d)) writeFileSync(d, readFileSync(s)); } }; cp(DATA_SRC, DATA_DST); console.log('数据文件已复制到', DATA_DST); } else console.warn('⚠ 未找到数据源目录:', DATA_SRC); for (const d of [join(WP_DIR, 'data'), join(WP_DIR, 'data', 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
-  ensureDefaultData(join(WP_DIR, 'data'));
-
+  ensureDefaultData(DATA_DST);
   ensureConfig();
 
-  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（任意目录可用：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（在项目根目录运行：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log(`数据目录：${DATA_DST}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
 function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
@@ -470,17 +483,17 @@ function parseSelection(answer, total) { if (!answer) return []; const a = answe
 async function selectTools(tools) { return new Promise(resolve => { console.log('\n请选择要安装的 AI 工具：\n'); tools.forEach((t, i) => console.log(`${i + 1}. ${t.name} — ${t.path}`)); console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：'); const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question('', ans => { rl.close(); const s = parseSelection(ans, tools.length); if (!s.length) { console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n'); resolve([]); } else resolve(s); }); }); }
 
 
-const DEFAULT_CFG = `# ~/.wpb/setting.toml
+const DEFAULT_CFG = `# .wpb/setting.toml
 [site.myblog]
 name = "BuchMistrz"
 url = "https://www.buchmistrz.com/wp-json/wp/v2"
 user = "admin"
 pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
 categories = [8603, "Disposable Vape"]  # 支持数字ID或名称，多个分类
-keywords = ["data/keywords.csv"]  # 可多个，支持 https:// URL（如 Google Sheets）
-products = "data/products.csv"  # 可选，支持 https:// URL，可多个（随机选一个）
+#keywords = ["data/keywords.csv"]  # 可选，可多个，支持 https:// URL（如 Google Sheets）
+#products = "data/products.csv"  # 可选，支持 https:// URL，可多个（随机选一个）
 prompts = "data/prompts.md"  # 可选，支持 https:// URL，可多个（随机选一个）
-extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
+#extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
 
 # 四种图片模式（选其一）：
 # 1) S3 兼容 — mode="s3" 拉图池混排，endpoint 可选
@@ -516,38 +529,20 @@ function ensureConfig() {
   return true;
 }
 
-// 兜底生成缺失的默认数据文件（doInstall 和 initConfig 共用）
+// 兜底生成缺失的默认数据文件（仅 prompts.md，其他由用户自行配置）
 function ensureDefaultData(dataDir) {
   const promptsPath = join(dataDir, 'prompts.md');
   if (!existsSync(promptsPath)) writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
-  const keywordsPath = join(dataDir, 'keywords.csv');
-  if (!existsSync(keywordsPath)) writeFileSync(keywordsPath, '\uFEFF' + ['keyword', '人工智能趋势', 'Python入门指南', 'Web开发最佳实践', '云计算架构', '数据安全'].map(r => r.includes(',') ? `"${r}"` : r).join('\n') + '\n', 'utf-8');
-  const productsPath = join(dataDir, 'products.csv');
-  if (!existsSync(productsPath)) writeFileSync(productsPath, '\uFEFF' + [['name', 'price', 'desc'], ['产品A', '99', '基础版'], ['产品B', '199', '高级版']].map(r => r.map(f => f.includes(',') ? `"${f}"` : f).join(',')).join('\n') + '\n', 'utf-8');
 }
 
 // ── 首次运行自动初始化（不依赖 xlsx，仅用 Node 标准库）──
 function initConfig() {
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
   const DATA_DST = join(WP_DIR, 'data');
-  const DATA_SRC = join(SCRIPT_DIR, '..', 'references', 'data');
   if (!existsSync(DATA_DST)) mkdirSync(DATA_DST, { recursive: true });
-  // 复制 references/data/ 到 ~/.wpb/data/
-  if (existsSync(DATA_SRC)) {
-    for (const f of readdirSync(DATA_SRC)) {
-      const s = join(DATA_SRC, f), d = join(DATA_DST, f);
-      if (statSync(s).isDirectory()) {
-        if (!existsSync(d)) mkdirSync(d, { recursive: true });
-        for (const sub of readdirSync(s)) { const dst = join(d, sub); if (!existsSync(dst)) copyFileSync(join(s, sub), dst); }
-      } else { if (!existsSync(d)) copyFileSync(s, d); }
-    }
-  }
-  for (const d of [DATA_DST, join(DATA_DST, 'extensions')]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
-  // 兜底生成缺失的默认数据文件
   ensureDefaultData(DATA_DST);
-  // setting.toml 由 ensureConfig 幂等写入（已存在即跳过，避免覆盖用户配置）
   ensureConfig();
-  console.log(`[wpb] 数据文件已复制到 ${DATA_DST}`);
+  console.log(`[wpb] 数据目录: ${DATA_DST}`);
 }
 
 // ── 主函数 ──
