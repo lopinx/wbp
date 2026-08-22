@@ -15,7 +15,7 @@ wpb pick
 
 从关键词文件随机选取一行，输出 JSON：
 - `site`：随机站点配置（名称、URL、分类、图片配置）
-- `keyword`：关键词（取该行第一个字段的值）
+- `keyword`：随机选取的查询词
 - `keywordRow`：整行数据
 - `products`：产品列表（配置了 products 时才有）
 - `prompts`：写作指令（配置了 prompts 时才有）
