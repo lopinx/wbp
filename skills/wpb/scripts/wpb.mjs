@@ -457,7 +457,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   if (!extHref.length) warnings.push('E-E-A-T 信号不足 (无外部权威外链，建议引用权威来源链接)');
   if (extHref.length) {
     const codes = await Promise.all(extHref.slice(0, 3).map(async u => { try { const r = await fetchWithRetry(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }); return r.status; } catch { return null; } }));
-    const dead = codes.filter(c => c !== null && c >= 400 && c < 500).length;
+    const dead = codes.filter(c => c !== null && c >= 400).length;
     if (dead) issues.push(`失效链接: ${dead} 个`);
   }
   return { issues, warnings };
