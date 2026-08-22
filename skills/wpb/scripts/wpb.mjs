@@ -490,52 +490,62 @@ function parseSelection(answer, total) { if (!answer) return []; const a = answe
 async function selectTools(tools) { return new Promise(resolve => { console.log('\n请选择要安装的 AI 工具：\n'); tools.forEach((t, i) => console.log(`${i + 1}. ${t.name} — ${t.path}`)); console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：'); const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question('', ans => { rl.close(); const s = parseSelection(ans, tools.length); if (!s.length) { console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n'); resolve([]); } else resolve(s); }); }); }
 
 
-// ── 主函数 ──
-async function main() {
-  const cmd = process.argv[2] || 'pick';
-  if (cmd === 'install') { await doInstall(); return; }
-  if (!['pick', 'fetch', 'publish'].includes(cmd)) die('用法: wpb [pick|fetch <url>|publish <file>|install]');
-  if (!existsSync(CFG)) die(`未找到配置文件: ${CFG}\n请手动创建（参考 skills/wpb/references/setting-reference.toml）`);
-  const cfg = parseToml(readFileSync(CFG, 'utf-8'));
-  const sites = cfg.site || {}; const siteNames = Object.keys(sites);
-  if (!siteNames.length) die('未配置任何站点');
+// 加载文档片段：URL 走 fetchWithRetry，本地走 readFileSync；截取前 maxChars 字符
+async function loadDocSnippet(p, maxChars) {
+  const text = isUrl(p) ? (await (await fetchWithRetry(p)).text()) : readFileSync(p, 'utf-8');
+  return text.slice(0, maxChars);
+}
 
-  // ── fetch：按 URL origin 匹配站点，拉取已发布文章供改写 ──
-  if (cmd === 'fetch') {
-    const articleUrl = process.argv[3];
-    if (!articleUrl) die('用法: wpb fetch <文章URL>');
-    if (!isUrl(articleUrl)) die('fetch 参数必须是 http(s) URL: ' + articleUrl);
-    const origin = siteOriginOf(articleUrl);
-    const [siteName, site] = findSiteByOrigin(sites, origin);
-    if (!site.name) site.name = siteName;
-    validateSite(siteName, site);
-    const slug = new URL(articleUrl).pathname.split('/').filter(Boolean).pop();
-    if (!slug) die('无法从 URL 提取文章 slug: ' + articleUrl);
-    const post = await findPostBySlug(site, articleUrl, slug);
-    if (!post) die('未找到文章: ' + articleUrl);
-    const full = await wpFetch(site, `posts/${post.id}?context=edit`);
-    const tagNames = await termNames(site, 'tags', full.tags);
-    const catNames = await termNames(site, 'categories', full.categories);
-    console.log(JSON.stringify({ postId: full.id, site: siteName, link: full.link, title: full.title.raw, excerpt: full.excerpt.raw, content: full.content.raw, tags: tagNames, categories: catNames, instructions: '这是已发布文章。改写后保存草稿时必须保留 postId 和 site 字段，wpb publish 将更新该文章而非新建。' }, null, 2));
-    return;
-  }
+// 发布前校验：去重（排除自身）+ 质量检查（同一套硬指标），不通过则 die
+async function validateBeforePublish(site, draft, cleanedContent, excludeId) {
+  const [dup, q] = await Promise.all([
+    checkDuplicate(site, draft.title, excludeId),
+    checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)
+  ]);
+  if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
+  if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
+  if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
+}
 
-  // ── pick / publish：随机选站点；草稿显式指定 site 时按其精确绑定，避免多站点随机重选导致发错站 ──
-  let siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; if (!site.name) site.name = siteName;
+// ── fetch：按 URL origin 匹配站点，拉取已发布文章供改写 ──
+async function runFetch(sites, siteNames) {
+  const articleUrl = process.argv[3];
+  if (!articleUrl) die('用法: wpb fetch <文章URL>');
+  if (!isUrl(articleUrl)) die('fetch 参数必须是 http(s) URL: ' + articleUrl);
+  const origin = siteOriginOf(articleUrl);
+  const [siteName, site] = findSiteByOrigin(sites, origin);
+  if (!site.name) site.name = siteName;
   validateSite(siteName, site);
-  const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean), promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean), extPaths = (site.extensions || []).map(p => safePath(p));
-  // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync
+  const slug = new URL(articleUrl).pathname.split('/').filter(Boolean).pop();
+  if (!slug) die('无法从 URL 提取文章 slug: ' + articleUrl);
+  const post = await findPostBySlug(site, articleUrl, slug);
+  if (!post) die('未找到文章: ' + articleUrl);
+  const full = await wpFetch(site, `posts/${post.id}?context=edit`);
+  const tagNames = await termNames(site, 'tags', full.tags);
+  const catNames = await termNames(site, 'categories', full.categories);
+  console.log(JSON.stringify({ postId: full.id, site: siteName, link: full.link, title: full.title.raw, excerpt: full.excerpt.raw, content: full.content.raw, tags: tagNames, categories: catNames, instructions: '这是已发布文章。改写后保存草稿时必须保留 postId 和 site 字段，wpb publish 将更新该文章而非新建。' }, null, 2));
+}
+
+// ── pick：随机选站点 + 加载关键词/产品/指令/扩展 + 输出上下文 JSON ──
+async function runPick(site, siteName) {
+  const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean);
+  const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean);
+  const promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean);
+  const extPaths = (site.extensions || []).map(p => safePath(p));
   const pathOk = p => p && (isUrl(p) || existsSync(p));
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
-  const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat()); if (!keywords.length) die('关键词文件为空');
-  const kw = keywords[Math.floor(Math.random() * keywords.length)]; const firstKey = kw ? Object.keys(kw)[0] : ''; const keyword = (kw && firstKey) ? kw[firstKey] : '';
+  const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat());
+  if (!keywords.length) die('关键词文件为空');
+  const kw = keywords[Math.floor(Math.random() * keywords.length)];
+  const firstKey = kw ? Object.keys(kw)[0] : '';
+  const keyword = (kw && firstKey) ? kw[firstKey] : '';
   const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; try { return await readTable(ok[Math.floor(Math.random() * ok.length)]); } catch (e) { log('warn', '产品文件加载失败:', e.message); return []; } };
-  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; const p = ok[Math.floor(Math.random() * ok.length)]; try { return isUrl(p) ? (await (await fetchWithRetry(p)).text()).slice(0, 3000) : readFileSync(p, 'utf-8').slice(0, 3000); } catch (e) { log('warn', '写作指令加载失败:', e.message); return ''; } };
+  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; try { return loadDocSnippet(ok[Math.floor(Math.random() * ok.length)], 3000); } catch (e) { log('warn', '写作指令加载失败:', e.message); return ''; } };
   const loadExtDocs = async () => {
     const ok = extPaths.filter(ep => pathOk(ep)); if (!ok.length) return '';
     // 并发加载扩展文档，限制并发数避免过多请求；单个加载失败不影响整体，保留 --- <filename> --- 分隔格式
     const parts = await concurrentMap(ok, 5, async (ep) => {
-      try { return `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${isUrl(ep) ? (await (await fetchWithRetry(ep)).text()).slice(0, 2000) : readFileSync(ep, 'utf-8').slice(0, 2000)}`; }
+      try { return `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${await loadDocSnippet(ep, 2000)}`; }
       catch (e) { log('warn', '扩展知识加载失败:', e.message); return ''; }
     });
     return parts.filter(Boolean).join('');
@@ -543,9 +553,13 @@ async function main() {
   const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
   let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
-  if (cmd === 'pick') { const pickWarnings = []; if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图'); console.log(JSON.stringify({ site: { name: site.name, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2)); return; }
+  const pickWarnings = [];
+  if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图');
+  console.log(JSON.stringify({ site: { name: site.name, url: site.url, categories: site.categories, images: safe }, keyword, keywordRow: kw, products: products.slice(0, 5), images, prompts: promptDoc, extensions: extDocs, ...(pickWarnings.length ? { _warnings: pickWarnings } : {}) }, null, 2));
+}
 
-  // ── publish ──
+// ── publish：读取草稿 → 校验 → 图片处理 → 创建/更新文章 ──
+async function runPublish(sites, siteNames, site, siteName) {
   const draftPath = process.argv[3];
   if (!draftPath) die('用法: wpb publish <草稿文件路径>');
   if (!existsSync(draftPath)) die('草稿文件不存在: ' + draftPath);
@@ -567,14 +581,7 @@ async function main() {
     if (!draft.site && siteNames.length > 1) {
       die('多站点环境下更新文章需在草稿中指定 site 字段（站点名），请先用 wpb fetch 获取完整草稿上下文');
     }
-    // 去重排除自身（checkDuplicate 第三个参数）+ 质量检查（同一套硬指标，不放宽）
-    const [dup, q] = await Promise.all([
-      checkDuplicate(site, draft.title, draft.postId),
-      checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)
-    ]);
-    if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
-    if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
-    if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
+    await validateBeforePublish(site, draft, cleanedContent, draft.postId);
     // categories：draft 有值则解析，无值省略（WP 保留原分类）
     const catIds = draft.categories ? await resolveCategoryIds(site, draft.categories) : undefined;
     const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
@@ -587,17 +594,29 @@ async function main() {
   }
 
   // ── 创建路径 ──
-  const [dup, q] = await Promise.all([
-    checkDuplicate(site, draft.title),
-    checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)
-  ]);
-  if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
-  if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
-  if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
+  await validateBeforePublish(site, draft, cleanedContent, 0);
   const catIds = await resolveCategoryIds(site, draft.categories?.length ? draft.categories : site.categories);
   const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
   const res = await wpFetch(site, 'posts', { method: 'POST', body: JSON.stringify({ title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', categories: catIds, tags: tagIds }) });
   log('info', `发布成功: ${res.link} (ID: ${res.id})`);
+}
+
+// ── 主函数：路由 ──
+async function main() {
+  const cmd = process.argv[2] || 'pick';
+  if (cmd === 'install') { await doInstall(); return; }
+  if (!['pick', 'fetch', 'publish'].includes(cmd)) die('用法: wpb [pick|fetch <url>|publish <file>|install]');
+  if (!existsSync(CFG)) die(`未找到配置文件: ${CFG}\n请手动创建（参考 skills/wpb/references/setting-reference.toml）`);
+  const cfg = parseToml(readFileSync(CFG, 'utf-8'));
+  const sites = cfg.site || {}; const siteNames = Object.keys(sites);
+  if (!siteNames.length) die('未配置任何站点');
+  if (cmd === 'fetch') { await runFetch(sites, siteNames); return; }
+  // pick / publish：随机选站点；草稿显式指定 site 时按其精确绑定，避免多站点随机重选导致发错站
+  let siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
+  if (!site.name) site.name = siteName;
+  validateSite(siteName, site);
+  if (cmd === 'pick') { await runPick(site, siteName); return; }
+  await runPublish(sites, siteNames, site, siteName);
 }
 
 main().catch(e => die(e.message));
