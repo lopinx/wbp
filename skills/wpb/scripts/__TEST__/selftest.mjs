@@ -128,6 +128,11 @@ const r2c = pt(`[s]\narr = ["double", 'single']`);
 ok(r2c.s.arr.length === 2, '数组混用单双引号');
 ok(r2c.s.arr[0] === 'double', '数组双引号元素');
 ok(r2c.s.arr[1] === 'single', '数组单引号元素');
+// 数组元素反转义（与标量字符串一致：此前 "C:\\data\\a.csv" 保留双反斜杠）
+const r2f = pt('[s]\narr = ["C:\\\\data\\\\a.csv"]');
+ok(r2f.s.arr[0] === 'C:\\data\\a.csv', '数组元素反转义双反斜杠（Windows 路径）');
+const r2g = pt(`[s]\narr = ["say \\"hi\\""]`);
+ok(r2g.s.arr[0] === 'say "hi"', '数组元素反转义转义引号');
 
 // 多行数组（跨行折叠）
 const r2d = pt(`[s]\narr = [\n  "a",\n  "b",\n  "c"\n]`);
