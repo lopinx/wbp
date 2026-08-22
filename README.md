@@ -6,7 +6,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-290%2F290%20passing-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-308%2F308%20passing-brightgreen)](#)
 
 </div>
 
@@ -79,7 +79,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (294/294 通过)
+npm test           # 运行自检测试套件 (308/308 通过)
 ```
 
 ---
@@ -218,7 +218,7 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # 核心单文件（所有逻辑，含 initConfig 首次运行初始化）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (294/294 通过)
+│               └── selftest.mjs       # 自检测试 (308/308 通过)
 ```
 
 **运行时生成**：
@@ -283,9 +283,9 @@ domain        = "cdn.example.com"                           # S3 模式可选，
 # ── 图片搜索配置（仅在 mode = "search" 时有效）──
 [site.myblog.images]
 keys       = ["your-serper-dev-api-key-1", "your-key-2"]   # Serper.dev API Key（可多个，随机轮询）
-gl         = "pl"                                           # 搜索结果国家代码，默认 "pl"
-hl         = "pl"                                           # 搜索结果语言代码，默认 "pl"
-tbs        = "qdr:w"                                        # 时间范围过滤，默认过去一周
+gl         = "pl"                                           # 搜索结果国家代码，未配置则不传（由 Serper 默认）
+hl         = "pl"                                           # 搜索结果语言代码，未配置则不传
+tbs        = "qdr:w"                                        # 时间范围过滤，未配置则不传
 # 可选值：qdr:d(一天) / qdr:w(一周) / qdr:m(一月) / qdr:y(一年)
 query      = ""                                             # 固定搜索词（可选，留空则用文章标题+标签组合搜索）
 ```
@@ -319,9 +319,9 @@ query      = ""                                             # 固定搜索词（
 | `cdn.endpoint` | `site.<slug>.cdn` | string | ❌ | S3 兼容端点 URL（留空则使用 AWS 默认端点）。支持 Cloudflare R2、MinIO、七牛 Kodo 等 |
 | `cdn.domain` | `site.<slug>.cdn` | string | ❌ | S3 模式自定义图片 URL 前缀（留空则用 endpoint） |
 | `images.keys` | `site.<slug>.images` | array | search模式必填 | Serper.dev API Key，支持多个随机轮询以提升配额 |
-| `images.gl` | `site.<slug>.images` | string | ❌ | 搜索结果国家代码，默认 `pl` |
-| `images.hl` | `site.<slug>.images` | string | ❌ | 搜索结果语言代码，默认 `pl` |
-| `images.tbs` | `site.<slug>.images` | string | ❌ | 时间范围过滤，默认 `qdr:w`（过去一周） |
+| `images.gl` | `site.<slug>.images` | string | ❌ | 搜索结果国家代码，未配置则不传（由 Serper 默认） |
+| `images.hl` | `site.<slug>.images` | string | ❌ | 搜索结果语言代码，未配置则不传 |
+| `images.tbs` | `site.<slug>.images` | string | ❌ | 时间范围过滤，未配置则不传 |
 | `images.query` | `site.<slug>.images` | string | ❌ | 固定搜索词（留空则用文章标题 + 标签组合搜索） |
 
 ### 多站点支持
@@ -564,7 +564,7 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 
 ```
 skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，含 initConfig 首次运行初始化）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (294/294 通过)
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (308/308 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```

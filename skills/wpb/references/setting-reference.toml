@@ -93,9 +93,9 @@ extensions = [
 #  "serper-dev-api-key-1",           # Serper.dev API Key（必填，支持多 key 随机轮询）
 #  "serper-dev-api-key-2",
 #]
-#gl = "pl"                          # 地理位置代码，默认 "pl"（波兰）
-#hl = "pl"                          # 语言代码，默认 "pl"
-#tbs = "qdr:w"                      # 时间范围过滤器，默认 "qdr:w"（过去一周）
+#gl = "pl"                          # 地理位置代码，未配置则不传（由 Serper 默认）
+#hl = "pl"                          # 语言代码，未配置则不传
+#tbs = "qdr:w"                      # 时间范围过滤器，未配置则不传
 #                                   # 可选值：qdr:d（过去24小时）/ qdr:w（过去一周）/ qdr:m（过去一月）/ qdr:y（过去一年）
 #query = "固定搜索词"                # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
 #                                   # 留空则自动使用标签+标题组合搜索
