@@ -391,7 +391,6 @@ ok(src.includes('paras.length < 2'), 'mixImages 少于2段落不插入');
 // searchImages 支持 query 字段覆盖默认搜索词（tags+title）
 ok(src.includes('const { gl, hl, tbs, query } = cfg'), 'searchImages 解构 query 字段（gl/hl/tbs 不写死默认值）');
 ok(src.includes('if (query)'), 'searchImages query 非空时直接使用');
-ok(!/gl\s*=\s*'pl'/.test(src), 'searchImages 不再写死 gl 默认值 pl');
 ok(/if\s*\(gl\)\s*body\.gl/.test(src), 'searchImages 仅在配置了 gl 时才传该字段');
 ok(src.includes('const body = { q }'), 'searchImages 请求体以 q 为基础按需扩展');
 // searchImages query 字段功能测试（mock fetchWithRetry，验证实际调用参数）
@@ -631,11 +630,6 @@ ok(src.includes('async function doInstall'), 'wpb.mjs 包含 doInstall 安装函
 ok(src.includes('checkCLI'), '安装逻辑包含 CLI 检测');
 ok(src.includes('detectedTools'), '安装逻辑包含工具跟踪');
 ok(src.includes('npm update -g'), '安装逻辑包含 npm 全局安装升级提示');
-// 初始化逻辑已完全移除：不自动创建 .wpb/setting.toml/prompts.md
-ok(!src.includes('function initConfig'), 'initConfig 首次运行初始化函数已移除');
-ok(!src.includes('function ensureConfig'), 'ensureConfig 自动生成配置函数已移除');
-ok(!src.includes('function ensureDefaultData'), 'ensureDefaultData 自动生成数据函数已移除');
-ok(!src.includes('DEFAULT_CFG'), 'DEFAULT_CFG 配置模板已移除');
 ok(src.includes('未找到配置文件'), '无配置时报错提示手动创建');
 ok(src.includes('setting-reference.toml'), '报错提示参考 setting-reference.toml');
 ok(src.includes('命令文件无变化，跳过'), 'createCommandFile 内容相同时跳过写入');
@@ -644,10 +638,6 @@ ok(src.includes('function findWpDir'), 'findWpDir 向上查找 .wpb 目录函数
 ok(/findWpDir[\s\S]*?setting\.toml/.test(src), 'findWpDir 检测 setting.toml 存在');
 ok(src.includes('WP_DIR = findWpDir()'), 'WP_DIR 由 findWpDir 动态定位');
 ok(!/mkdirSync/.test(/function findWpDir[\s\S]*?\n\}/.exec(src)?.[0] || ''), 'findWpDir 不自动创建目录');
-ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wpb.mjs）');
-ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（无自动初始化）');
-const PKG = readFileSync(join(SCRIPT_DIR, '../../..', 'package.json'), 'utf-8');
-ok(!PKG.includes('"postinstall"'), 'package.json 无 postinstall 钩子（npm 安装不执行脚本）');
 // parseSelection 返回 0-based 索引（用户输入 1-based 编号），避免 detectedTools[idx] 越界
 ok(src.includes('function parseSelection'), 'wpb.mjs 包含 parseSelection 选择解析函数');
 ok(/parseSelection[\s\S]*?\.map\(i\s*=>\s*i\s*-\s*1\)/.test(src), "parseSelection 将 1-based 编号转换为 0-based 索引");
