@@ -325,6 +325,8 @@ ok(/c !== null && c >= 400/.test(src), '死链计 4xx 和 5xx（网络错误不�
 ok(src.includes('async function checkDeadLinks'), 'checkDeadLinks 公共函数已提取（死链检测逻辑独立）');
 // navRe 支持多层子路径（如 /category/vape/disposable 不被误判为产品链接）
 ok(/\(\/\[\^\/\]\+\)\*\//.test(src), 'navRe 支持多层子路径匹配');
+// 内链分类按 origin 精确比较（相对链接算内链，防伪前缀域名）
+ok(src.includes("siteOriginOf(u) === siteOrigin"), '内链分类按 origin 精确比较（防伪前缀）');
 
 // ── 8. 图片函数 ──
 console.log('\n## 8. 图片函数');
@@ -338,6 +340,9 @@ ok(src.includes('AWS_ACCESS_KEY_ID'), 's3List 支持 AWS_ACCESS_KEY_ID 环境变
 ok(src.includes('AWS_SECRET_ACCESS_KEY'), 's3List 支持 AWS_SECRET_ACCESS_KEY 环境变量');
 // S3 endpoint 可选（留空用 AWS 默认）
 ok(/endpoint \?/.test(src), 's3List endpoint 可选');
+// SigV4 签名完整性：canonical request 必须参与 stringToSign（否则真实 AWS 返回 403）
+ok(src.includes('const canonicalReq'), 's3List 构建 canonical request');
+ok(/update\(canonicalReq\)/.test(src), 's3List canonical request 参与签名（SHA-256 后入 stringToSign）');
 // pick 输出脱敏（API keys 不泄露）
 ok(src.includes('keys: undefined'), 'pick 输出对 images.keys 脱敏');
 // CDN 模式保留远程图片
@@ -502,6 +507,7 @@ ok(src.includes('pathOk(ep)'), 'extensions 使用 pathOk 检查');
 // products/prompts 支持多个文件（随机选一个）
 ok(src.includes('asArray(site.products)'), 'products 支持多文件数组');
 ok(src.includes('asArray(site.prompts)'), 'prompts 支持多文件数组');
+ok(src.includes('asArray(site.extensions)'), 'extensions 支持多文件数组（标量字符串配置不崩溃）');
 // checkQuality 死链检测使用 extHref 而非 allLinks（只检查外链）
 ok(src.includes('extHref.slice(0, 3)'), '死链检测取外链前 3 个（非所有链接）');
 ok(src.includes('if (extHref.length)'), '死链检测仅在有外链时执行');
@@ -539,6 +545,7 @@ ok(src.includes("src=[\"']([^\"']+)[\"']"), 'uploadExternalImages img src 正则
 // prompts/extensions 支持 URL 路径（loadDocSnippet 公共函数统一处理 URL/local）
 ok(src.includes('async function loadDocSnippet'), 'loadDocSnippet 公共函数已提取（消除 isUrl ? fetch : readFileSync 重复）');
 ok(src.includes('isUrl(p)'), 'loadDocSnippet 内部 isUrl 判断 URL 路径');
+ok(/loadDocSnippet[\s\S]*?res\.ok/.test(src), 'loadDocSnippet 校验 res.ok（错误页 HTML 不注入 pick 输出）');
 
 // ── 10b. fetch 命令与 publish 更新路径 ──
 console.log('\n## 10b. fetch 命令与 publish 更新路径');
@@ -621,6 +628,8 @@ ok(/async function main\(\) \{[\s\S]*?await runPublish/.test(src), 'main 路由�
     ok(vd({ title: 't', content: 'c', excerpt: 'e', postId: 1.5 }).valid === false, 'validateDraft 非整数 postId 拒绝');
     ok(vd({ title: 't', content: 'c', excerpt: 'e', postId: 'abc' }).valid === false, 'validateDraft 字符串 postId 拒绝');
     ok(vd({ title: 't', content: 'c', excerpt: 'e', site: 42 }).valid === false, 'validateDraft 非字符串 site 拒绝');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', tags: 'vape, cbd' }).valid === false, 'validateDraft 字符串 tags 拒绝（须数组）');
+    ok(vd({ title: 't', content: 'c', excerpt: 'e', categories: 'news' }).valid === false, 'validateDraft 字符串 categories 拒绝（须数组）');
   }
 }
 // findSiteByOrigin 单测（纯函数，eval 提取；需注入 siteOriginOf 依赖）
