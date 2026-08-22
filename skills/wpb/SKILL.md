@@ -47,7 +47,7 @@ wpb pick
   "content": "<p>HTML正文内容</p><h3>小标题</h3><p>...</p>",
   "tags": ["标签1", "标签2", "标签3"],
   "postId": 123,          // 可选，更新已有文章时必填（由 wpb fetch 输出）
-  "site": "myblog"        // 可选，多站点更新时必填（由 wpb fetch 输出）
+  "site": "myblog"        // 可选，填写后精确发布到该站点；多站点更新时必填（由 wpb fetch 输出）
 }
 
 wpb publish <草稿文件路径>
