@@ -595,6 +595,8 @@ ok(src.includes('更新成功:'), '更新成功日志文案');
 ok(src.includes('[站点:'), '更新日志含站点名');
 // 公共函数 processImagesAndTags 消除重复
 ok(src.includes('processImagesAndTags'), 'processImagesAndTags 公共函数已提取');
+// applyImageMap 消除 processImagesAndTags 内 S3/默认两分支重复的 replaceAll 映射
+ok(src.includes('applyImageMap'), 'applyImageMap 公共函数已提取（消除 replaceAll 映射重复）');
 // validateBeforePublish 公共函数消除更新/创建路径重复（checkDuplicate + checkQuality + die）
 ok(src.includes('async function validateBeforePublish'), 'validateBeforePublish 公共函数已提取');
 ok(/validateBeforePublish[\s\S]*?draft\.postId/.test(src), '更新路径调用 validateBeforePublish 传 draft.postId');

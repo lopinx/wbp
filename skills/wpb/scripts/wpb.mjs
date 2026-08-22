@@ -329,6 +329,9 @@ async function checkDuplicate(site, title, excludeId = 0) { const posts = await 
 
 async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats).map(c => { const isId = typeof c === 'number' || /^\d+$/.test(String(c)); return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache); })); }
 
+// 将上传结果映射 { oldUrl: newUrl } 批量替换到 HTML 中
+const applyImageMap = (html, up) => { if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) html = html.replaceAll(o, n); return html; };
+
 // 图片处理 + 标签创建（更新/创建路径共用，消除重复）
 async function processImagesAndTags(site, content, tags, title) {
   let finalContent = content; let tagIds = [];
@@ -338,10 +341,9 @@ async function processImagesAndTags(site, content, tags, title) {
     // S3 图片保留原 URL，但非 S3 域的外链图片仍上传到媒体库
     const s3Base = site.cdn.domain || (site.cdn.endpoint ? site.cdn.endpoint.replace(/\/$/, '') : `https://${site.cdn.bucket}.s3.${site.cdn.region || 'us-east-1'}.amazonaws.com`);
     const s3Origin = (() => { try { return new URL(s3Base).origin; } catch { return null; } })();
-    const up = await uploadExternalImages(site, finalContent, s3Origin ? [s3Origin] : []);
-    if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n);
+    finalContent = applyImageMap(finalContent, await uploadExternalImages(site, finalContent, s3Origin ? [s3Origin] : []));
   }
-  else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
+  else { finalContent = applyImageMap(finalContent, await uploadExternalImages(site, finalContent)); }
   if (tags?.length) {
     const results = await concurrentMap(tags, 5, async (t) => {
       try { return await findOrCreate(site, 'tags', t, tagCache); }
@@ -508,7 +510,7 @@ async function validateBeforePublish(site, draft, cleanedContent, excludeId) {
 }
 
 // ── fetch：按 URL origin 匹配站点，拉取已发布文章供改写 ──
-async function runFetch(sites, siteNames) {
+async function runFetch(sites) {
   const articleUrl = process.argv[3];
   if (!articleUrl) die('用法: wpb fetch <文章URL>');
   if (!isUrl(articleUrl)) die('fetch 参数必须是 http(s) URL: ' + articleUrl);
@@ -527,7 +529,7 @@ async function runFetch(sites, siteNames) {
 }
 
 // ── pick：随机选站点 + 加载关键词/产品/指令/扩展 + 输出上下文 JSON ──
-async function runPick(site, siteName) {
+async function runPick(site) {
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean);
   const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean);
   const promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean);
@@ -610,12 +612,12 @@ async function main() {
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
   if (!siteNames.length) die('未配置任何站点');
-  if (cmd === 'fetch') { await runFetch(sites, siteNames); return; }
+  if (cmd === 'fetch') { await runFetch(sites); return; }
   // pick / publish：随机选站点；草稿显式指定 site 时按其精确绑定，避免多站点随机重选导致发错站
   let siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
   if (!site.name) site.name = siteName;
   validateSite(siteName, site);
-  if (cmd === 'pick') { await runPick(site, siteName); return; }
+  if (cmd === 'pick') { await runPick(site); return; }
   await runPublish(sites, siteNames, site, siteName);
 }
 
