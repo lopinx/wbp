@@ -8,6 +8,16 @@ import { createHash, createHmac } from 'crypto';
 import readline from 'readline';
 import * as XLSX from 'xlsx';
 
+// AbortSignal.any 自 Node 20.3 起可用；package.json 声明 >=18，需 polyfill 兼容 Node 18/19
+if (typeof AbortSignal.any !== 'function') {
+  AbortSignal.any = (sigs) => {
+    const ctrl = new AbortController();
+    const onAbort = (s) => { ctrl.abort(s.reason); for (const s2 of sigs) s2.removeEventListener?.('abort', onAbort); };
+    for (const s of sigs) { if (s.aborted) { ctrl.abort(s.reason); return ctrl.signal; } s.addEventListener('abort', () => onAbort(s)); }
+    return ctrl.signal;
+  };
+}
+
 // Windows 控制台默认代码页为 936 (GBK)，Node 输出 UTF-8 字节会被按 GBK 解码导致乱码
 // （如「用法」显示为「鐢ㄦ硶」）。切换到 65001 (UTF-8) 让控制台正确解码。
 if (platform() === 'win32') {
@@ -168,7 +178,6 @@ async function searchImages(cfg, tags, title) {
 
 async function fetchWithRetry(url, opts = {}, retries = 3) {
   const backoff = i => 1000 * 2 ** i + Math.random() * 200;
-  let lastRes = null;
   for (let i = 0; i <= retries; i++) {
     try {
       // 每次重试新建独立 timeout signal，避免复用已 aborted 的 signal 导致重试失效；
@@ -180,16 +189,16 @@ async function fetchWithRetry(url, opts = {}, retries = 3) {
       if (!Object.keys(headers).some(k => k.toLowerCase() === 'user-agent'))
         headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
       const res = await fetch(url, { ...opts, signal, headers });
-      lastRes = res;
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i >= retries) return res;
       const d = backoff(i); log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
     } catch (e) {
-      if (i >= retries) throw e;
+      // 外部 signal 主动 abort（如死链检测超时）不重试，避免对已放弃的请求做无意义重试
+      if (opts.signal?.aborted || i >= retries) throw e;
       const d = backoff(i); log('warn', `  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
     }
   }
-  return lastRes;
+  throw new Error('fetchWithRetry: unreachable');
 }
 
 // ── S3 列表 ──
@@ -248,10 +257,11 @@ async function uploadImage(site, imgUrl) {
 }
 
 function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.env.WP_PASSWORD || site.pass}`).toString('base64'); }
-async function uploadExternalImages(site, html) {
+async function uploadExternalImages(site, html, skipOrigins = []) {
   const urls = [...new Set([...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]))];
   const siteOrigin = siteOriginOf(site.url);
-  const external = urls.filter(url => !(siteOrigin && url.startsWith(siteOrigin)));
+  const skip = [siteOrigin, ...skipOrigins].filter(Boolean);
+  const external = urls.filter(url => !skip.some(o => url.startsWith(o)));
   if (!external.length) return {};
   // 并发上传外部图片，限制并发数 5，避免同时发起过多请求
   const entries = await concurrentMap(external, 5, async (url) => {
@@ -296,7 +306,13 @@ async function processImagesAndTags(site, content, tags, title) {
   let finalContent = content; let tagIds = [];
   if (site.cdn && site.cdn.mode === 'search') { try { const imgs = await searchImages(site.images || {}, tags || [], title); if (imgs.length) finalContent = mixImages(finalContent, imgs); } catch (e) { log('warn', '图片搜索失败:', e.message); } }
   else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
-  else if (site.cdn && site.cdn.mode === 's3') { log('info', 'S3 模式：保留 S3 图片 URL 不变'); }
+  else if (site.cdn && site.cdn.mode === 's3') {
+    // S3 图片保留原 URL，但非 S3 域的外链图片仍上传到媒体库
+    const s3Base = site.cdn.domain || (site.cdn.endpoint ? site.cdn.endpoint.replace(/\/$/, '') : `https://${site.cdn.bucket}.s3.${site.cdn.region || 'us-east-1'}.amazonaws.com`);
+    const s3Origin = (() => { try { return new URL(s3Base).origin; } catch { return null; } })();
+    const up = await uploadExternalImages(site, finalContent, s3Origin ? [s3Origin] : []);
+    if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n);
+  }
   else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
   if (tags?.length) {
     const results = await concurrentMap(tags, 5, async (t) => {
@@ -638,7 +654,7 @@ async function main() {
   if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
   if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
   if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
-  const catIds = await resolveCategoryIds(site, draft.categories || site.categories);
+  const catIds = await resolveCategoryIds(site, draft.categories?.length ? draft.categories : site.categories);
   const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
   const res = await wpFetch(site, 'posts', { method: 'POST', body: JSON.stringify({ title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', categories: catIds, tags: tagIds }) });
   log('info', `发布成功: ${res.link} (ID: ${res.id})`);
