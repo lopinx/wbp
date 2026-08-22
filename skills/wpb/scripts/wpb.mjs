@@ -12,8 +12,14 @@ import * as XLSX from 'xlsx';
 if (typeof AbortSignal.any !== 'function') {
   AbortSignal.any = (sigs) => {
     const ctrl = new AbortController();
-    const onAbort = (s) => { ctrl.abort(s.reason); for (const s2 of sigs) s2.removeEventListener?.('abort', onAbort); };
-    for (const s of sigs) { if (s.aborted) { ctrl.abort(s.reason); return ctrl.signal; } s.addEventListener('abort', () => onAbort(s)); }
+    const listeners = [];
+    const cleanup = () => sigs.forEach((s, i) => s.removeEventListener?.('abort', listeners[i]));
+    for (const s of sigs) {
+      if (s.aborted) { ctrl.abort(s.reason); return ctrl.signal; }
+      const listener = () => { ctrl.abort(s.reason); cleanup(); };
+      listeners.push(listener);
+      s.addEventListener('abort', listener, { once: true });
+    }
     return ctrl.signal;
   };
 }
@@ -102,6 +108,7 @@ function parseToml(t) {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 function pickSheet(wb) {
   const names = wb.SheetNames;
+  if (!names.length) throw new Error('工作簿没有任何工作表');
   if (names.length <= 1) return wb.Sheets[names[0]];
   for (const name of names) {
     const ws = wb.Sheets[name];
@@ -117,7 +124,7 @@ function pickSheet(wb) {
 async function readTable(p) {
   const url = isUrl(p);
   let data;
-  if (url) { const res = await fetchWithRetry(p, { signal: AbortSignal.timeout(TIMEOUT_MS) }); if (!res.ok) throw new Error('URL 获取失败: ' + res.status + ' ' + p); data = await res.arrayBuffer(); }
+  if (url) { const res = await fetchWithRetry(p, { signal: AbortSignal.timeout(TIMEOUT_MS) }); if (!res.ok) throw new Error('URL 获取失败: ' + res.status + ' ' + p); data = new Uint8Array(await res.arrayBuffer()); }
   else { if (!existsSync(p)) throw new Error('文件未找到: ' + p); data = readFileSync(p); }
   const wb = XLSX.read(data, { type: url ? 'array' : 'buffer', cellDates: false });
   const rows = XLSX.utils.sheet_to_json(pickSheet(wb), { header: 1, raw: false, defval: '' });
@@ -162,6 +169,7 @@ async function searchImages(cfg, tags, title) {
       if (!res.ok) {
         log('warn', `  图片搜索失败 (key ${keyIndex+1}): ${res.status}`);
         attempt++;
+        if (attempt < maxAttempts) await new Promise(r => setTimeout(r, backoff(attempt)));
         continue;
       }
       let data;
@@ -260,6 +268,8 @@ async function uploadImage(site, imgUrl) {
     throw new Error(`图片大小 ${Math.round(parseInt(contentLength, 10) / 1024 / 1024)}MB 超过 5MB 限制`);
   }
   const buf = Buffer.from(await res.arrayBuffer());
+  // 服务器不返回 content-length（分块传输）时以实际缓冲大小二次校验，防止超大图读入内存后仍被上传
+  if (buf.length > 5 * 1024 * 1024) throw new Error(`图片大小 ${Math.round(buf.length / 1024 / 1024)}MB 超过 5MB 限制`);
   let raw; try { raw = decodeURIComponent(imgUrl.split('?')[0].split('/').pop() || 'image.jpg'); } catch { raw = imgUrl.split('?')[0].split('/').pop() || 'image.jpg'; }
   const ext = '.' + ((raw.match(/\.(jpg|jpeg|png|gif|webp|avif)$/i) || [])[1] || 'jpg');
   const name = (raw.replace(/\.(jpg|jpeg|png|gif|webp|avif)$/i, '') || 'image').replace(/[^\w\u0100-\u017F\u4e00-\u9fff.-]/g, '-').slice(0, 60) + ext;
@@ -273,8 +283,10 @@ function wpAuth(site) { return 'Basic ' + Buffer.from(`${site.user}:${process.en
 async function uploadExternalImages(site, html, skipOrigins = []) {
   const urls = [...new Set([...html.matchAll(/<img[^>]+src=["']([^"']+)["']/g)].map(m => m[1]))];
   const siteOrigin = siteOriginOf(site.url);
-  const skip = [siteOrigin, ...skipOrigins].filter(Boolean);
-  const external = urls.filter(url => !skip.some(o => url.startsWith(o)));
+  // 按 URL origin 精确比较，防止 https://site.com.evil.com 之类伪前缀绕过
+  const skip = [siteOrigin, ...skipOrigins.map(o => { try { return new URL(o).origin; } catch { return o; } })].filter(Boolean);
+  const urlOrigin = u => { try { return new URL(u).origin; } catch { return ''; } };
+  const external = urls.filter(url => !skip.some(o => urlOrigin(url) === o));
   if (!external.length) return {};
   // 并发上传外部图片，限制并发数 5，避免同时发起过多请求
   const entries = await concurrentMap(external, 5, async (url) => {
@@ -310,7 +322,10 @@ async function findOrCreate(site, type, name, cache) {
   cache.set(key, item.id); return item.id;
 }
 
-async function checkDuplicate(site, title, excludeId = 0) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.id !== excludeId && p.title && (p.title.raw === title || p.title.rendered === title)) || null; }
+// WP REST 默认 context 不返回 title.raw，rendered 含 HTML 实体（&amp; 等）；归一化后比较保证去重有效
+const decodeHtml = s => String(s).replace(/&#(\d+);/g, (_, d) => String.fromCharCode(d)).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '');
+const normTitle = t => decodeHtml(t).replace(/\s+/g, ' ').trim();
+async function checkDuplicate(site, title, excludeId = 0) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.id !== excludeId && p.title && (normTitle(p.title.raw || '') === normTitle(title) || normTitle(p.title.rendered || '') === normTitle(title))) || null; }
 
 async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats).map(c => { const isId = typeof c === 'number' || /^\d+$/.test(String(c)); return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache); })); }
 
@@ -505,8 +520,8 @@ async function main() {
     return;
   }
 
-  // ── pick / publish：随机选站点（保持原有行为）──
-  const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; if (!site.name) site.name = siteName;
+  // ── pick / publish：随机选站点；草稿显式指定 site 时按其精确绑定，避免多站点随机重选导致发错站 ──
+  let siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName]; if (!site.name) site.name = siteName;
   validateSite(siteName, site);
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean); const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean), promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean), extPaths = (site.extensions || []).map(p => safePath(p));
   // 路径可用性判断：URL 始终视为可用（由 readTable 远程获取），本地文件须 existsSync
@@ -537,40 +552,41 @@ async function main() {
   let draft; try { draft = JSON.parse(readFileSync(draftPath, 'utf-8')); } catch (e) { die(`草稿文件 JSON 解析失败: ${e.message}\n文件: ${draftPath}`); }
   const v = validateDraft(draft); if (!v.valid) die('草稿验证失败: ' + v.errors.join('; '));
   const cleanedContent = stripNitroPack(draft.content);
+  // 草稿含 site 时精确绑定站点（创建与更新路径通用），保证与 wpb pick 输出的站点一致
+  if (draft.site) {
+    const named = sites[draft.site];
+    if (!named) die(`草稿中指定的站点 "${draft.site}" 不在配置中，可用站点: ${siteNames.join(', ')}`);
+    site = named; siteName = draft.site;
+    if (!site.name) site.name = siteName;
+    validateSite(siteName, site);
+  }
 
   // 更新路径：draft.postId 存在时走 POST 更新（WP REST 兼容性最好），否则走 POST 创建
   const isUpdate = draft.postId !== undefined;
-  let targetSite = site, targetSiteName = siteName;
   if (isUpdate) {
-    if (draft.site) {
-      const named = sites[draft.site];
-      if (!named) die(`草稿中指定的站点 "${draft.site}" 不在配置中，可用站点: ${siteNames.join(', ')}`);
-      targetSite = named; targetSiteName = draft.site;
-      if (!targetSite.name) targetSite.name = targetSiteName;
-      validateSite(targetSiteName, targetSite);
-    } else if (siteNames.length > 1) {
+    if (!draft.site && siteNames.length > 1) {
       die('多站点环境下更新文章需在草稿中指定 site 字段（站点名），请先用 wpb fetch 获取完整草稿上下文');
     }
     // 去重排除自身（checkDuplicate 第三个参数）+ 质量检查（同一套硬指标，不放宽）
     const [dup, q] = await Promise.all([
-      checkDuplicate(targetSite, draft.title, draft.postId),
-      checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], targetSite)
+      checkDuplicate(site, draft.title, draft.postId),
+      checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)
     ]);
     if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
     if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
     if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
     // categories：draft 有值则解析，无值省略（WP 保留原分类）
-    const catIds = draft.categories ? await resolveCategoryIds(targetSite, draft.categories) : undefined;
-    const { finalContent, tagIds } = await processImagesAndTags(targetSite, cleanedContent, draft.tags, draft.title);
+    const catIds = draft.categories ? await resolveCategoryIds(site, draft.categories) : undefined;
+    const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
     const body = { title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish' };
     if (catIds) body.categories = catIds;
     if (tagIds.length) body.tags = tagIds;  // 缺失则不传，WP 保留原标签
-    const res = await wpFetch(targetSite, `posts/${draft.postId}`, { method: 'POST', body: JSON.stringify(body) });
-    log('info', `更新成功: ${res.link} (ID: ${res.id}) [站点: ${targetSiteName}]`);
+    const res = await wpFetch(site, `posts/${draft.postId}`, { method: 'POST', body: JSON.stringify(body) });
+    log('info', `更新成功: ${res.link} (ID: ${res.id}) [站点: ${siteName}]`);
     return;
   }
 
-  // ── 创建路径（原有逻辑不变）──
+  // ── 创建路径 ──
   const [dup, q] = await Promise.all([
     checkDuplicate(site, draft.title),
     checkQuality(draft.title, cleanedContent, draft.excerpt, draft.tags || [], site)

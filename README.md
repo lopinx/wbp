@@ -79,7 +79,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (320/320 通过)
+npm test           # 运行自检测试套件 (333/333 通过)
 ```
 
 ---
@@ -158,7 +158,7 @@ wpb publish <草稿文件路径>
 | `content` | string | ✅ | HTML 格式的文章正文，需包含 `<p>` 段落和 `<h3>` 小标题 |
 | `tags` | string[] | ❌ | 标签数组（3-10个，用于质量检查） |
 | `postId` | number | ❌ | 已有文章 ID（更新时必填，由 `wpb fetch` 输出） |
-| `site` | string | ❌ | 站点名（多站点更新时必填，由 `wpb fetch` 输出） |
+| `site` | string | ❌ | 站点名（填写后创建/更新都精确发布到该站点；多站点更新时必填，由 `wpb fetch` 输出） |
 
 ### 第 4 步：发布文章
 
@@ -207,16 +207,16 @@ wpb/
 │   └── wpb/
 │       ├── SKILL.md                   # AI 工具命令文件模板
 │       ├── references/
-│       │   └── data/                  # 示例数据文件（安装时复制到 .wpb/data/）
+│       │   └── data/                  # 示例数据文件（仓库内参考，不自动复制）
 │       │       ├── keywords.csv       # 关键词池
 │       │       ├── products.csv       # 产品信息
 │       │       ├── prompts.md         # 写作指令
 │       │       └── extensions/
 │       │           └── wiedza.md      # 扩展知识
 │       └── scripts/
-│           ├── wpb.mjs                # 核心单文件（所有逻辑，含 initConfig 首次运行初始化）
+│           ├── wpb.mjs                # 核心单文件（所有逻辑，无初始化逻辑）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (320/320 通过)
+│               └── selftest.mjs       # 自检测试 (333/333 通过)
 ```
 
 **运行时生成**：
@@ -232,7 +232,7 @@ wpb/
 
 ## 🔧 配置 `.wpb/setting.toml`
 
-运行 `npm i -g github:lopinx/wpb` 后自动生成默认配置。使用前请确保满足以下要求：
+安装后请确保满足以下要求：
 
 - Node.js ≥ 18.0
 - 一个 WordPress 网站（需要 REST API 访问权限和 Application Password）
@@ -557,13 +557,13 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 ## 🛠️ 开发
 
 ```
-skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，含 initConfig 首次运行初始化）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (320/320 通过)
+skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，无初始化逻辑）
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (333/333 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```
 
-> 无 `postinstall` 钩子。npm 安装时不执行任何脚本，首次运行 `wpb pick` 时自动初始化配置和数据。
+> 无 `postinstall` 钩子，无自动初始化。npm 安装时不执行任何脚本；首次运行 `wpb pick` 时若未找到 `.wpb/setting.toml` 则直接报错提示手动创建。
 
 ```bash
 node --check skills/wpb/scripts/wpb.mjs  # 语法检查

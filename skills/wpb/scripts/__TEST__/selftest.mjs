@@ -340,6 +340,10 @@ ok(/endpoint \?/.test(src), 's3List endpoint 可选');
 ok(src.includes('keys: undefined'), 'pick 输出对 images.keys 脱敏');
 // CDN 模式保留远程图片
 ok(src.includes("mode === 'cdn'"), 'CDN 模式保留远程图片不变');
+// readTable URL 分支转 Uint8Array 传给 SheetJS（type:'array' 期望字节数组，直接传 ArrayBuffer 不稳定）
+ok(src.includes('new Uint8Array(await res.arrayBuffer())'), 'readTable URL 分支 ArrayBuffer 转 Uint8Array');
+// pickSheet 空工作簿防护
+ok(src.includes('工作簿没有任何工作表'), 'pickSheet 空工作簿明确报错');
 // setting-reference.toml 使用 accessKeyId/secretAccessKey（配置模板参考）
 ok(refToml.includes('#accessKeyId'), 'setting-reference.toml 使用 accessKeyId');
 ok(refToml.includes('#secretAccessKey'), 'setting-reference.toml 使用 secretAccessKey');
@@ -351,6 +355,7 @@ ok(/AbortSignal\.any\(\[opts\.signal/.test(src), 'fetchWithRetry 外部 signal �
 ok(src.includes('opts = {}'), 'fetchWithRetry opts 默认空对象（防止单参数调用 crash）');
 ok(src.includes('opts.signal?.aborted'), 'fetchWithRetry 外部 signal abort 时不重试');
 ok(src.includes('AbortSignal.any') && src.includes('typeof AbortSignal.any'), 'AbortSignal.any polyfill 兼容 Node 18/19');
+ok(/AbortSignal\.any = \(sigs\)[\s\S]{0,600}?removeEventListener/.test(src), 'polyfill abort 时清理监听器（无泄漏）');
 // fetchWithRetry 重试 mock 测试：首次超时后第 2 次重试仍能成功（验证每次新建 signal）
 {
   const fnSrc = src.match(/async function fetchWithRetry[\s\S]*?\n\}/);
@@ -412,6 +417,8 @@ ok(src.includes('const body = { q }'), 'searchImages 请求体以 q 为基础按
     ok(capturedBody.q === 'override', 'query 即使 tags/title 为空仍生效');
   }
 }
+// searchImages 非 2xx 响应也退避（防止快速轮询 key 触发限流）
+ok(/图片搜索失败[\s\S]{0,200}?backoff\(attempt\)/.test(src), 'searchImages 非 2xx 重试前退避');
 // mixImages alt/title HTML 特殊字符转义
 {
   const escMix = mix('<p>P1</p><p>P2</p>', ['https://x.com/red-shoe.jpg']);
@@ -467,8 +474,11 @@ ok(/page <= 20/.test(src), 'findOrCreate 分页上限 20 页');
 ok(src.includes('Array.isArray(batch)'), 'findOrCreate 非数组响应时 break');
 // checkDuplicate 标题截断保护（防超长标题导致 WP 搜索异常）
 ok(src.includes('title.slice(0, 100)'), 'checkDuplicate 标题截断至 100 字符');
-// uploadExternalImages 跳过 site origin 和额外 origin（S3 域），filter(Boolean) 防空
-ok(src.includes('skip = [siteOrigin, ...skipOrigins].filter(Boolean)'), 'uploadExternalImages 跳过 site 和额外 origin');
+// uploadExternalImages 按 origin 精确比较跳过（防 site.com.evil.com 前缀伪装）
+ok(src.includes('const urlOrigin = u =>'), 'uploadExternalImages 提取 URL origin 辅助函数');
+ok(src.includes('urlOrigin(url) === o'), '外链图片过滤使用 origin 相等比较（非前缀 startsWith）');
+// uploadImage 缺少 content-length（分块传输）时按实际缓冲大小二次校验
+ok(src.includes('buf.length > 5 * 1024 * 1024'), 'uploadImage 缓冲大小二次校验（防 content-length 缺失绕过限制）');
 // checkQuality 关键词正则转义防护（用户标签含正则元字符时不注入）
 ok(src.includes('k.replace(/[.'), 'checkQuality 关键词正则转义防护');
 
@@ -504,8 +514,23 @@ ok(!/function readTable[\s\S]*?const isUrl =/.test(src), 'readTable 无 isUrl �
 ok(/https\?\:.*cdn-/.test(src), 'stripNitroPack 正则支持 http/https 双协议');
 // mixImages src 属性也经 escAttr 转义（防 URL 中双引号注入）
 ok(src.includes('src="${escAttr(used[i])}"'), 'mixImages src 属性经 escAttr 转义');
-// checkDuplicate 比较 title.raw 和 title.rendered（兼容 WordPress 格式化标题）
-ok(src.includes('p.title.raw === title || p.title.rendered === title'), 'checkDuplicate 比较 title.raw 和 title.rendered');
+// checkDuplicate 归一化标题比较（默认 context 不返回 title.raw，rendered 含 HTML 实体）
+ok(src.includes('const normTitle'), 'normTitle 标题归一化函数存在');
+ok(src.includes('const decodeHtml'), 'decodeHtml HTML 实体解码函数存在');
+ok(src.includes('normTitle(p.title.raw'), 'checkDuplicate 比较归一化 title.raw');
+ok(src.includes('normTitle(p.title.rendered'), 'checkDuplicate 比较归一化 title.rendered');
+// normTitle 功能测试（eval 提取；WP rendered 标题含实体，去重必须归一化）
+{
+  const dh = src.match(/const decodeHtml = s => [^\n]+/);
+  const nt = src.match(/const normTitle = t => [^\n]+/);
+  if (!dh || !nt) error('decodeHtml/normTitle 函数提取失败');
+  else {
+    const normTitle = eval('(function() { ' + dh[0] + ' ' + nt[0] + ' return normTitle; })()');
+    ok(normTitle('Hello &amp; World') === 'Hello & World', 'normTitle 解码 &amp; 实体');
+    ok(normTitle('Price &#8364;') === 'Price €', 'normTitle 解码数字实体');
+    ok(normTitle('  multi   space ') === 'multi space', 'normTitle 压缩空白并去首尾空格');
+  }
+}
 // 死链检测使用 fetchWithRetry 而非裸 fetch（支持重试）
 ok(src.includes('fetchWithRetry(u, { method:'), '死链检测使用 fetchWithRetry 重试');
 // uploadExternalImages img src 正则同时匹配单引号和双引号
@@ -556,6 +581,8 @@ ok(src.includes("method: 'POST'"), '更新用 POST（非 PUT，兼容性最好�
 // 更新路径站点绑定（多站点安全：draft.site 指定，无则单站点回退，多站点拒绝）
 ok(src.includes('多站点环境下更新文章需在草稿中指定 site 字段'), '多站点无 site 绑定时拒绝更新');
 ok(src.includes('草稿中指定的站点'), 'draft.site 不匹配时明确报错');
+// draft.site 精确绑定创建/更新路径通用（防多站点随机重选发错站）
+ok(src.includes('草稿含 site 时精确绑定站点'), 'publish 按 draft.site 精确绑定站点（创建/更新通用）');
 // 更新时 categories 用 draft.categories，无值省略
 ok(src.includes('draft.categories ? await resolveCategoryIds'), '更新 categories 有值则解析');
 ok(src.includes('if (catIds) body.categories = catIds'), '更新无 categories 时省略（保留原分类）');
