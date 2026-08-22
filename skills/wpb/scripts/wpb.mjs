@@ -62,7 +62,7 @@ const siteOriginOf = url => (String(url).match(/^https?:\/\/[^/]+/i) || [''])[0]
 // 安全路径：URL 原样返回（由 readTable 远程获取）；绝对路径原样 resolve；相对路径解析到 .wpb 并防越界
 const safePath = p => { if (!p) return null; if (isUrl(p)) return p; const a = isAbsPath(p) ? resolve(p) : resolve(WP_DIR, p); if (!isAbsPath(p) && a !== WP_DIR && !a.startsWith(WP_DIR + sep)) throw new Error(`路径越界 .wpb: ${p} (解析为 ${a})`); return a; };
 function isValidKey(k) { return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !['__proto__', 'constructor', 'prototype'].includes(k); }
-const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); if (d.postId !== undefined && (!Number.isInteger(d.postId) || d.postId <= 0)) e.push('postId 必须是正整数'); if (d.site !== undefined && typeof d.site !== 'string') e.push('site 必须是字符串'); return { valid: e.length === 0, errors: e }; };
+const validateDraft = d => { const e = []; if (!d || typeof d !== 'object' || Array.isArray(d)) return { valid: false, errors: ['草稿必须是 JSON 对象'] }; for (const f of ['title', 'content', 'excerpt']) if (!d[f]) e.push(`草稿缺少必需字段: ${f}`); if (d.title && typeof d.title !== 'string') e.push('title 必须是字符串'); if (d.content && typeof d.content !== 'string') e.push('content 必须是字符串'); if (d.excerpt && typeof d.excerpt !== 'string') e.push('excerpt 必须是字符串'); if (d.postId !== undefined && (!Number.isInteger(d.postId) || d.postId <= 0)) e.push('postId 必须是正整数'); if (d.site !== undefined && typeof d.site !== 'string') e.push('site 必须是字符串'); if (d.tags !== undefined && !Array.isArray(d.tags)) e.push('tags 必须是字符串数组'); if (d.categories !== undefined && !Array.isArray(d.categories)) e.push('categories 必须是数组'); return { valid: e.length === 0, errors: e }; };
 
 // ── 迷你 TOML 解析器 ──
 function parseToml(t) {
@@ -240,8 +240,13 @@ async function s3List(cfg, limit) {
   const kService = sign('s3', kRegion);
   const kSigning = sign('aws4_request', kService);
   const emptyHash = createHash('sha256').update('').digest('hex');
-  const auth = 'AWS4-HMAC-SHA256 Credential=' + accessKeyId + '/' + date.slice(0, 8) + '/' + region + '/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=' + sign('AWS4-HMAC-SHA256\n' + date + '\n' + date.slice(0, 8) + '/' + region + '/s3/aws4_request\n' + emptyHash, kSigning);
   const query = 'list-type=2&max-keys=' + limit + (prefix ? '&prefix=' + encodeURIComponent(prefix) : '');
+  // SigV4：stringToSign 第 4 行必须是 canonical request 的 SHA-256（此前误用空载荷哈希，
+  // 导致 method/path/query 均未参与签名，真实 AWS 返回 403 SignatureDoesNotMatch）
+  const canonicalReq = 'GET\n/\n' + query + '\nhost:' + host + '\nx-amz-content-sha256:' + emptyHash + '\nx-amz-date:' + date + '\n\nhost;x-amz-content-sha256;x-amz-date\n' + emptyHash;
+  const scope = date.slice(0, 8) + '/' + region + '/s3/aws4_request';
+  const stringToSign = 'AWS4-HMAC-SHA256\n' + date + '\n' + scope + '\n' + createHash('sha256').update(canonicalReq).digest('hex');
+  const auth = 'AWS4-HMAC-SHA256 Credential=' + accessKeyId + '/' + scope + ', SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=' + sign(stringToSign, kSigning);
   const res = await fetchWithRetry(base + '/?' + query, { headers: { host, 'x-amz-date': date, 'x-amz-content-sha256': emptyHash, authorization: auth } });
   if (!res.ok) throw new Error('S3 列表失败: ' + res.status);
   const xml = await res.text();
@@ -323,7 +328,7 @@ async function findOrCreate(site, type, name, cache) {
 }
 
 // WP REST 默认 context 不返回 title.raw，rendered 含 HTML 实体（&amp; 等）；归一化后比较保证去重有效
-const decodeHtml = s => String(s).replace(/&#(\d+);/g, (_, d) => String.fromCharCode(d)).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '');
+const decodeHtml = s => String(s).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '');
 const normTitle = t => decodeHtml(t).replace(/\s+/g, ' ').trim();
 async function checkDuplicate(site, title, excludeId = 0) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.id !== excludeId && p.title && (normTitle(p.title.raw || '') === normTitle(title) || normTitle(p.title.rendered || '') === normTitle(title))) || null; }
 
@@ -459,7 +464,8 @@ async function checkQuality(title, content, excerpt, tags, site) {
   // 一次性提取所有 href 链接，复用于内链/外链/死链检测
   const allLinks = [...body.matchAll(HREF_RE)].map(m => m[1]);
   if (siteOrigin) {
-    const internalLinks = allLinks.filter(u => u.startsWith(siteOrigin));
+    // 内链按 origin 精确比较：相对链接（无 origin）视为内链；防 https://site.com.evil.com 伪前缀绕过
+    const internalLinks = allLinks.filter(u => !siteOriginOf(u) || siteOriginOf(u) === siteOrigin);
     if (!internalLinks.length) warnings.push('没有内部链接');
     const escOrigin = siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const rootRe = new RegExp(`^${escOrigin}/?$`);
@@ -473,7 +479,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
     const hit = kwList.filter(k => { const m = lower.match(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')); return m && m.length >= 2; });
     if (!hit.length) warnings.push('关键词命中不足 (标签在正文出现均少于 2 次)');
   }
-  const extHref = allLinks.filter(u => !siteOrigin || !u.startsWith(siteOrigin));
+  const extHref = allLinks.filter(u => siteOrigin && siteOriginOf(u) && siteOriginOf(u) !== siteOrigin);
   if (!extHref.length) warnings.push('E-E-A-T 信号不足 (无外部权威外链，建议引用权威来源链接)');
   if (extHref.length) {
     const dead = await checkDeadLinks(extHref);
@@ -595,10 +601,12 @@ async function selectTools(tools) {
 }
 
 
-// 加载文档片段：URL 走 fetchWithRetry，本地走 readFileSync；截取前 maxChars 字符
+// 加载文档片段：URL 走 fetchWithRetry（校验 res.ok，错误页不注入内容），本地走 readFileSync；截取前 maxChars 字符
 async function loadDocSnippet(p, maxChars) {
-  const text = isUrl(p) ? (await (await fetchWithRetry(p)).text()) : readFileSync(p, 'utf-8');
-  return text.slice(0, maxChars);
+  if (!isUrl(p)) return readFileSync(p, 'utf-8').slice(0, maxChars);
+  const res = await fetchWithRetry(p);
+  if (!res.ok) throw new Error('URL 获取失败: ' + res.status + ' ' + p);
+  return (await res.text()).slice(0, maxChars);
 }
 
 // 发布前校验：去重（排除自身）+ 质量检查（同一套硬指标），不通过则 die
@@ -636,7 +644,7 @@ async function runPick(site) {
   const kwPaths = asArray(site.keywords).map(p => safePath(p)).filter(Boolean);
   const prodPaths = asArray(site.products).map(p => safePath(p)).filter(Boolean);
   const promptPaths = asArray(site.prompts).map(p => safePath(p)).filter(Boolean);
-  const extPaths = (site.extensions || []).map(p => safePath(p));
+  const extPaths = asArray(site.extensions).map(p => safePath(p));
   const pathOk = p => p && (isUrl(p) || existsSync(p));
   if (!kwPaths.length || !kwPaths.some(pathOk)) die(`未找到关键词文件: ${kwPaths.join(', ')}`);
   const keywords = filterSpamKeywords((await Promise.all(kwPaths.filter(pathOk).map(readTable))).flat());
@@ -664,21 +672,25 @@ async function runPick(site) {
 }
 
 // ── publish：读取草稿 → 校验 → 图片处理 → 创建/更新文章 ──
-async function runPublish(sites, siteNames, site, siteName) {
+async function runPublish(sites, siteNames) {
   const draftPath = process.argv[3];
   if (!draftPath) die('用法: wpb publish <草稿文件路径>');
   if (!existsSync(draftPath)) die('草稿文件不存在: ' + draftPath);
   let draft; try { draft = JSON.parse(readFileSync(draftPath, 'utf-8')); } catch (e) { die(`草稿文件 JSON 解析失败: ${e.message}\n文件: ${draftPath}`); }
   const v = validateDraft(draft); if (!v.valid) die('草稿验证失败: ' + v.errors.join('; '));
   const cleanedContent = stripNitroPack(draft.content);
-  // 草稿含 site 时精确绑定站点（创建与更新路径通用），保证与 wpb pick 输出的站点一致
+  // 草稿含 site 时精确绑定站点（创建与更新路径通用），保证与 wpb pick 输出的站点一致；
+  // 未指定时随机选取。校验放在选定之后，避免随机命中坏配置站点时误杀 publish
+  let siteName, site;
   if (draft.site) {
     const named = sites[draft.site];
     if (!named) die(`草稿中指定的站点 "${draft.site}" 不在配置中，可用站点: ${siteNames.join(', ')}`);
-    site = named; siteName = draft.site;
-    if (!site.name) site.name = siteName;
-    validateSite(siteName, site);
+    siteName = draft.site; site = named;
+  } else {
+    siteName = siteNames[Math.floor(Math.random() * siteNames.length)]; site = sites[siteName];
   }
+  if (!site.name) site.name = siteName;
+  validateSite(siteName, site);
 
   // 更新路径：draft.postId 存在时走 POST 更新（WP REST 兼容性最好），否则走 POST 创建
   const isUpdate = draft.postId !== undefined;
@@ -716,12 +728,15 @@ async function main() {
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
   if (!siteNames.length) die('未配置任何站点');
   if (cmd === 'fetch') { await runFetch(sites); return; }
-  // pick / publish：随机选站点；草稿显式指定 site 时按其精确绑定，避免多站点随机重选导致发错站
-  let siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
-  if (!site.name) site.name = siteName;
-  validateSite(siteName, site);
-  if (cmd === 'pick') { await runPick(site); return; }
-  await runPublish(sites, siteNames, site, siteName);
+  // pick：随机选站点并校验；publish 的站点选择在 runPublish 内完成（草稿 site 字段优先）
+  if (cmd === 'pick') {
+    const siteName = siteNames[Math.floor(Math.random() * siteNames.length)], site = sites[siteName];
+    if (!site.name) site.name = siteName;
+    validateSite(siteName, site);
+    await runPick(site);
+    return;
+  }
+  await runPublish(sites, siteNames);
 }
 
 main().catch(e => die(e.message));
