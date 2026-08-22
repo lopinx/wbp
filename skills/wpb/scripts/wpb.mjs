@@ -27,7 +27,7 @@ if (platform() === 'win32') {
   try { process.stdout.setDefaultEncoding('utf-8'); process.stderr.setDefaultEncoding('utf-8'); } catch {}
 }
 
-// 从 CWD 向上查找含 setting.toml 的 .wpb 目录；未找到则在 CWD 创建（类 git .git 目录）
+// 从 CWD 向上查找含 setting.toml 的 .wpb 目录（类 git .git）；未找到则返回 CWD 下的预期路径（不自动创建）
 function findWpDir() {
   let dir = process.cwd();
   while (true) {
@@ -37,9 +37,7 @@ function findWpDir() {
     if (parent === dir) break;
     dir = parent;
   }
-  const wpDir = join(process.cwd(), '.wpb');
-  if (!existsSync(wpDir)) mkdirSync(wpDir, { recursive: true });
-  return wpDir;
+  return join(process.cwd(), '.wpb');
 }
 
 const TIMEOUT_MS = 30000, WP_DIR = findWpDir(), CFG = join(WP_DIR, 'setting.toml');
@@ -455,9 +453,6 @@ const AGENTS_SKILLS = { claude: { name: 'Claude Code', dir: ['.claude', 'skills'
 
 async function doInstall() {
   console.log('=== WordPress 发布器安装程序 ===\n');
-  if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
-  const DATA_DST = join(WP_DIR, 'data');
-  if (!existsSync(DATA_DST)) mkdirSync(DATA_DST, { recursive: true });
 
   // 用户手动运行 `wpb install`（TTY）时走完整 AI CLI 检测 + 命令文件创建流程；
   // 无 postinstall 钩子；npm 全局安装时用 symlink，脚本在 symlink 目标被清理后无法执行
@@ -468,10 +463,7 @@ async function doInstall() {
 
   console.log('=== 全局命令 ==='); console.log('✓ wpb 命令已通过 npm 全局安装自动注册'); console.log('  升级方式：npm update -g @lopinx/wpb');
 
-  ensureDefaultData(DATA_DST);
-  ensureConfig();
-
-  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（在项目根目录运行：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`配置文件：${CFG}`); console.log(`数据目录：${DATA_DST}`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（在项目根目录运行：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`\n下一步：手动创建配置文件 .wpb/setting.toml（参考 skills/wpb/references/setting-reference.toml）`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
 function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
@@ -483,75 +475,12 @@ function parseSelection(answer, total) { if (!answer) return []; const a = answe
 async function selectTools(tools) { return new Promise(resolve => { console.log('\n请选择要安装的 AI 工具：\n'); tools.forEach((t, i) => console.log(`${i + 1}. ${t.name} — ${t.path}`)); console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：'); const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question('', ans => { rl.close(); const s = parseSelection(ans, tools.length); if (!s.length) { console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n'); resolve([]); } else resolve(s); }); }); }
 
 
-const DEFAULT_CFG = `# .wpb/setting.toml
-[site.myblog]
-name = "BuchMistrz"
-url = "https://www.buchmistrz.com/wp-json/wp/v2"
-user = "admin"
-pass = "xxxx xxxx xxxx xxxx"  # WP Application Password
-categories = [8603, "Disposable Vape"]  # 支持数字ID或名称，多个分类
-#keywords = ["data/keywords.csv"]  # 可选，可多个，支持 https:// URL（如 Google Sheets）
-#products = "data/products.csv"  # 可选，支持 https:// URL，可多个（随机选一个）
-prompts = "data/prompts.md"  # 可选，支持 https:// URL，可多个（随机选一个）
-#extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
-
-# 四种图片模式（选其一）：
-# 1) S3 兼容 — mode="s3" 拉图池混排，endpoint 可选
-# 2) 图片搜索 — mode="search" 通过 Serper.dev 等 API 搜索图片
-# 3) CDN — mode="cdn" 远程URL原样保留
-# 4) 不配 cdn 节点 → 自动上传到媒体库
-#[site.myblog.cdn]
-#mode = "s3"
-#bucket = "my-bucket"
-#region = "us-east-1"
-#accessKeyId = "AKIA..."
-#secretAccessKey = "..."
-#prefix = "images/"
-# endpoint 可选，不填则自动使用 AWS S3 地址
-# 支持：Cloudflare R2 / Amazon S3 / Kodo / MinIO / Ceph / 任意 S3 兼容存储
-#endpoint = "https://s3.us-east-1.qiniucs.com"
-#domain = "cdn.example.com"  # S3 模式可选，自定义图片 URL 前缀（留空则用 endpoint）
-#
-# 图片搜索 API（配合 cdn.mode="search" 使用）
-#[site.myblog.images]
-#keys = ["your-serper-dev-api-key-1", "your-serper-dev-api-key-2"]  # 随机轮询
-#gl = "pl"                # 国家代码，未配置则不传（由 Serper 默认）
-#hl = "pl"                # 语言代码，未配置则不传
-#tbs = "qdr:w"            # 时间范围，未配置则不传
-#query = "固定搜索词"           # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
-`;
-
-// setting.toml 已存在则跳过，避免覆盖用户编辑过的配置（doInstall / initConfig 共用，幂等）
-function ensureConfig() {
-  if (existsSync(CFG)) { console.log('[wpb] 配置文件已存在，跳过生成:', CFG); return false; }
-  writeFileSync(CFG, DEFAULT_CFG, 'utf-8');
-  console.log(`[wpb] 配置文件已生成: ${CFG}`);
-  return true;
-}
-
-// 兜底生成缺失的默认数据文件（仅 prompts.md，其他由用户自行配置）
-function ensureDefaultData(dataDir) {
-  const promptsPath = join(dataDir, 'prompts.md');
-  if (!existsSync(promptsPath)) writeFileSync(promptsPath, `# 写作指令\n\n## 文章风格\n- 专业但不晦涩，适当使用行业术语\n- 段落控制在 3-5 句，使用小标题分隔\n- 开头要有引人入胜的 hook\n\n## 内容结构\n1. 引言 (1-2段)\n2. 主体 (3-5个小标题)\n3. 总结 (1段)\n\n## SEO 要求\n- 标题包含关键词\n- 摘要 120-160 字\n- 标签 3-5 个\n`, 'utf-8');
-}
-
-// ── 首次运行自动初始化（不依赖 xlsx，仅用 Node 标准库）──
-function initConfig() {
-  if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
-  const DATA_DST = join(WP_DIR, 'data');
-  if (!existsSync(DATA_DST)) mkdirSync(DATA_DST, { recursive: true });
-  ensureDefaultData(DATA_DST);
-  ensureConfig();
-  console.log(`[wpb] 数据目录: ${DATA_DST}`);
-}
-
 // ── 主函数 ──
 async function main() {
   const cmd = process.argv[2] || 'pick';
   if (cmd === 'install') { await doInstall(); return; }
-  if (cmd === 'init') die('未识别命令 "init"。如需初始化配置请用: wpb install\n用法: wpb [pick|fetch <url>|publish <file>|install]');
   if (!['pick', 'fetch', 'publish'].includes(cmd)) die('用法: wpb [pick|fetch <url>|publish <file>|install]');
-  if (!existsSync(CFG)) { initConfig(); die(`首次运行：已生成默认配置 ${CFG}\n请编辑后重新运行: wpb ${cmd}`); }
+  if (!existsSync(CFG)) die(`未找到配置文件: ${CFG}\n请手动创建（参考 skills/wpb/references/setting-reference.toml）`);
   const cfg = parseToml(readFileSync(CFG, 'utf-8'));
   const sites = cfg.site || {}; const siteNames = Object.keys(sites);
   if (!siteNames.length) die('未配置任何站点');

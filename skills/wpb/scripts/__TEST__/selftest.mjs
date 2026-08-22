@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // selftest.mjs — wpb.mjs 自检（增强版）
-import { existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync, copyFileSync, readdirSync, statSync, unlinkSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir, tmpdir } from 'os';
 import { fileURLToPath } from 'url';
@@ -99,6 +99,7 @@ if (d) {
 // ── 4. TOML 解析器深度测试 ──
 console.log('\n## 4. TOML 解析器');
 const src = readFileSync(join(SCRIPT_DIR, 'wpb.mjs'), 'utf-8');
+const refToml = readFileSync(join(SCRIPT_DIR, '../references/setting-reference.toml'), 'utf-8');
 const tomlFn = src.match(/function isValidKey[\s\S]*?\nfunction parseToml[\s\S]*?\n\}/);
 ok(!!tomlFn, 'parseToml 已定义');
 const pt = eval(`(function() { ${tomlFn[0]}; return parseToml; })()`);
@@ -339,9 +340,9 @@ ok(/endpoint \?/.test(src), 's3List endpoint 可选');
 ok(src.includes('keys: undefined'), 'pick 输出对 images.keys 脱敏');
 // CDN 模式保留远程图片
 ok(src.includes("mode === 'cdn'"), 'CDN 模式保留远程图片不变');
-// DEFAULT_CFG 使用 accessKeyId/secretAccessKey
-ok(src.includes('#accessKeyId'), 'DEFAULT_CFG 使用 accessKeyId');
-ok(src.includes('#secretAccessKey'), 'DEFAULT_CFG 使用 secretAccessKey');
+// setting-reference.toml 使用 accessKeyId/secretAccessKey（配置模板参考）
+ok(refToml.includes('#accessKeyId'), 'setting-reference.toml 使用 accessKeyId');
+ok(refToml.includes('#secretAccessKey'), 'setting-reference.toml 使用 secretAccessKey');
 // publish 命令缺少文件参数时提示用法
 ok(src.includes("用法: wpb publish"), 'publish 缺参数时显示用法');
 // fetchWithRetry 每次重试新建独立 timeout signal，避免复用已 aborted signal 导致重试失效
@@ -448,8 +449,8 @@ ok(src.includes('\\u4e00-\\u9fff'), '文件名清理保留中日韩字符');
 // pick 输出 _warnings 字段提示图片池为空
 ok(src.includes('_warnings'), 'pick 输出 _warnings 字段');
 ok(src.includes('图片池为空'), 'pick 图片池空时添加警告');
-// DEFAULT_CFG domain 注释修正（仅 S3 模式，非 search 模式）
-ok(src.includes('S3 模式可选，自定义图片 URL 前缀'), 'DEFAULT_CFG domain 注释修正为仅 S3 模式');
+// setting-reference.toml domain 注释（仅 S3 模式）
+ok(refToml.includes('S3') && refToml.includes('domain'), 'setting-reference.toml 含 S3 domain 字段说明');
 
 // ── 9. WP API 函数 ──
 console.log('\n## 9. WP API 函数');
@@ -597,29 +598,27 @@ ok(src.includes('processImagesAndTags'), 'processImagesAndTags 公共函数已�
 // findSiteByOrigin 多匹配时拒绝（未匹配路径已在上方断言，因 die 会退出进程）
 ok(src.includes('多个站点配置了同一域名'), 'findSiteByOrigin 多匹配时拒绝');
 
-// ── 11. 安装逻辑（doInstall 处理手动安装，initConfig 处理首次运行自动初始化）──
+// ── 11. 安装逻辑（doInstall 仅做 AI CLI 检测 + 命令文件创建，无任何初始化）──
 console.log('\n## 11. 安装逻辑');
 ok(src.includes('async function doInstall'), 'wpb.mjs 包含 doInstall 安装函数');
 ok(src.includes('checkCLI'), '安装逻辑包含 CLI 检测');
 ok(src.includes('detectedTools'), '安装逻辑包含工具跟踪');
 ok(src.includes('npm update -g'), '安装逻辑包含 npm 全局安装升级提示');
-ok(src.includes('function initConfig'), 'wpb.mjs 包含 initConfig 首次运行初始化函数');
-// initConfig 应检测 setting.toml 已存在时跳过生成，避免覆盖用户配置
-ok(src.includes('function ensureConfig'), 'ensureConfig 幂等写入函数已提取');
-ok(/function ensureConfig[\s\S]*?existsSync\(CFG\)[\s\S]*?writeFileSync\(CFG/.test(src), 'ensureConfig 在 setting.toml 已存在时跳过生成');
-ok(src.includes('配置文件已存在，跳过生成'), 'ensureConfig 跳过生成时输出提示');
-ok(/doInstall[\s\S]*?ensureConfig\(\)/.test(src) && /function initConfig[\s\S]*?ensureConfig\(\)/.test(src), 'doInstall 与 initConfig 均走 ensureConfig 统一写入');
+// 初始化逻辑已完全移除：不自动创建 .wpb/setting.toml/prompts.md
+ok(!src.includes('function initConfig'), 'initConfig 首次运行初始化函数已移除');
+ok(!src.includes('function ensureConfig'), 'ensureConfig 自动生成配置函数已移除');
+ok(!src.includes('function ensureDefaultData'), 'ensureDefaultData 自动生成数据函数已移除');
+ok(!src.includes('DEFAULT_CFG'), 'DEFAULT_CFG 配置模板已移除');
+ok(src.includes('未找到配置文件'), '无配置时报错提示手动创建');
+ok(src.includes('setting-reference.toml'), '报错提示参考 setting-reference.toml');
 ok(src.includes('命令文件无变化，跳过'), 'createCommandFile 内容相同时跳过写入');
 ok(/createCommandFile[\s\S]*?readFileSync[\s\S]*?===\s*content/.test(src), 'createCommandFile 比较新旧内容后再写入');
-ok(src.includes('function ensureDefaultData'), 'ensureDefaultData 公共函数已提取');
 ok(src.includes('function findWpDir'), 'findWpDir 向上查找 .wpb 目录函数已提取');
 ok(/findWpDir[\s\S]*?setting\.toml/.test(src), 'findWpDir 检测 setting.toml 存在');
 ok(src.includes('WP_DIR = findWpDir()'), 'WP_DIR 由 findWpDir 动态定位');
-ok(src.includes('#keywords =') && src.includes('#products ='), 'DEFAULT_CFG 中 keywords/products 默认注释掉');
-ok(!/writeFileSync\(keywordsPath/.test(src), 'ensureDefaultData 不再生成 keywords.csv');
-ok(!/writeFileSync\(productsPath/.test(src), 'ensureDefaultData 不再生成 products.csv');
+ok(!/mkdirSync/.test(/function findWpDir[\s\S]*?\n\}/.exec(src)?.[0] || ''), 'findWpDir 不自动创建目录');
 ok(!existsSync(join(SCRIPT_DIR, 'install.mjs')), 'install.mjs 已移除（合并进 wpb.mjs）');
-ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（改为运行时 initConfig）');
+ok(!existsSync(join(SCRIPT_DIR, 'postinstall.mjs')), 'postinstall.mjs 已移除（无自动初始化）');
 const PKG = readFileSync(join(SCRIPT_DIR, '../../..', 'package.json'), 'utf-8');
 ok(!PKG.includes('"postinstall"'), 'package.json 无 postinstall 钩子（npm 安装不执行脚本）');
 // parseSelection 返回 0-based 索引（用户输入 1-based 编号），避免 detectedTools[idx] 越界
@@ -652,7 +651,6 @@ ok(existsSync(join(SCRIPT_DIR, '../references/data', 'prompts.md')), 'prompts.md
 ok(existsSync(join(SCRIPT_DIR, '../references/data', 'extensions', 'wiedza.md')), 'wiedza.md 存在');
 // setting-reference.toml 含 fetch/更新工作流说明
 ok(existsSync(join(SCRIPT_DIR, '../references/setting-reference.toml')), 'setting-reference.toml 存在');
-const refToml = readFileSync(join(SCRIPT_DIR, '../references/setting-reference.toml'), 'utf-8');
 ok(refToml.includes('wpb fetch'), 'setting-reference.toml 含 fetch 命令说明');
 ok(refToml.includes('postId'), 'setting-reference.toml 含 postId 更新字段说明');
 
@@ -837,37 +835,30 @@ ok(!gscOut.includes('2025-10'), 'GSC xlsx 不返回日期作为关键词');
 ok(gscOut.includes('fizzy') || gscOut.includes('buchmistrz'), 'GSC xlsx 返回查询数 sheet 中的关键词');
 writeFileSync(cfgPath, cfgBackup, 'utf-8');
 
-// ── 15. 初始化流程真实测试（initConfig / 安装场景）──
-console.log('\n## 15. 初始化流程真实测试');
+// ── 15. 无配置报错真实测试（不自动创建 .wpb / setting.toml / prompts.md）──
+console.log('\n## 15. 无配置报错真实测试');
 const _initCfgPath = join(WP_DIR, 'setting.toml');
 const _initCfgBackup = join(tmpdir(), `wpb-init-cfg-backup-${Date.now()}.toml`);
 
 try {
-  // 备份当前配置（若存在）
-  if (existsSync(_initCfgPath)) copyFileSync(_initCfgPath, _initCfgBackup);
-
-  // 测试1：首次运行（无 ~/.wpb/setting.toml）→ initConfig 应创建 config + 数据
-  const _origCfgExists = existsSync(_initCfgPath);
-  if (_origCfgExists) unlinkSync(_initCfgPath);
-  const _initRun = run('wpb.mjs', ['pick']);
-  ok(_initRun.status !== 0, '首次运行（无配置）退出码非零');
-  ok((_initRun.stderr + _initRun.stdout).includes('已生成默认配置') || (_initRun.stderr + _initRun.stdout).includes('首次运行'), '首次运行提示已生成配置');
-  ok(existsSync(_initCfgPath), '首次运行后 setting.toml 已生成');
-  // 恢复原始配置
-  if (_origCfgExists && existsSync(_initCfgBackup)) copyFileSync(_initCfgBackup, _initCfgPath);
-  else if (existsSync(_initCfgPath)) unlinkSync(_initCfgPath);
-  if (existsSync(_initCfgBackup)) unlinkSync(_initCfgBackup);
-  syncRefData();
+  // 测试1：空目录运行 pick → 报错且不自动创建 .wpb
+  const _emptyProject = mkdtempSync(join(tmpdir(), 'wpb-empty-'));
+  const _emptyRun = run('wpb.mjs', ['pick'], { cwd: _emptyProject });
+  ok(_emptyRun.status !== 0, '无配置时退出码非零');
+  ok((_emptyRun.stderr + _emptyRun.stdout).includes('未找到配置文件'), '无配置时报错提示');
+  ok((_emptyRun.stderr + _emptyRun.stdout).includes('setting-reference.toml'), '报错提示参考模板');
+  ok(!existsSync(join(_emptyProject, '.wpb')), '未自动创建 .wpb 目录');
+  try { rmSync(_emptyProject, { recursive: true, force: true }); } catch {}
 } catch (_) {}
 
 try {
-  // 测试2：setting.toml 已存在且含用户内容 → pick 不覆盖用户配置
+  // 测试2：setting.toml 已存在且含用户内容 → pick 正常执行且不修改配置
   const _userCfg = '[site.userblog]\nname = "User Blog"\nurl = "https://user.example.com/wp-json/wp/v2"\nuser = "admin"\npass = "xxxx xxxx xxxx xxxx"\ncategories = [1]\nkeywords = ["data/keywords.csv"]\n';
   writeFileSync(_initCfgPath, _userCfg, 'utf-8');
   const _initRun2 = run('wpb.mjs', ['pick']);
   ok(_initRun2.status === 0, 'setting.toml 已存在时 pick 可正常执行');
   const _currentCfg = readFileSync(_initCfgPath, 'utf-8');
-  ok(_currentCfg.includes('User Blog'), '用户配置未被 DEFAULT_CFG 覆盖（含 User Blog）');
+  ok(_currentCfg.includes('User Blog'), '用户配置保持不变（含 User Blog）');
   // 恢复原始配置
   writeFileSync(_initCfgPath, cfgBackup, 'utf-8');
 } catch (_) {

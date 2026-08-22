@@ -6,7 +6,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-321%2F321%20passing-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-320%2F320%20passing-brightgreen)](#)
 
 </div>
 
@@ -79,7 +79,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (321/321 通过)
+npm test           # 运行自检测试套件 (320/320 通过)
 ```
 
 ---
@@ -92,13 +92,11 @@ npm test           # 运行自检测试套件 (321/321 通过)
 npm i -g github:lopinx/wpb
 ```
 
-安装后在项目根目录运行 `wpb pick`，首次运行时自动完成：
-1. **生成默认配置**：创建 `.wpb/setting.toml`（可后续手动编辑）
-2. **生成写作指令**：创建 `.wpb/data/prompts.md`（默认数据文件，其他由用户自行配置）
+安装后在项目根目录手动创建配置文件 `.wpb/setting.toml`（参考 `skills/wpb/references/setting-reference.toml` 完整示例），填入你的 WordPress 站点信息（URL、用户名、Application Password），并配置关键词文件路径（支持 GSC/Bing/百度站长导出）。
 
-然后编辑 `.wpb/setting.toml`，填入你的 WordPress 站点信息（URL、用户名、Application Password），配置关键词文件路径（支持 GSC/Bing/百度站长导出），再次运行 `wpb pick`。
+> **无自动初始化**：wpb 不自动创建 `.wpb` 目录或任何配置/数据文件，无配置时直接报错提示。所有数据文件（keywords/products/prompts/extensions）由用户自行放置。
 
-> **可选**：如需为本地已安装的 AI CLI 工具（Claude Code、Gemini CLI 等 11 种）创建命令文件，运行 `wpb install`。该命令在上述基础配置之上额外完成 AI CLI 检测 + 命令文件生成。
+> **可选**：如需为本地已安装的 AI CLI 工具（Claude Code、Gemini CLI 等 11 种）创建命令文件，运行 `wpb install`（仅做 AI CLI 检测 + 命令文件生成，不做配置初始化）。
 
 > **卸载**：
 > ```bash
@@ -218,16 +216,15 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # 核心单文件（所有逻辑，含 initConfig 首次运行初始化）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (321/321 通过)
+│               └── selftest.mjs       # 自检测试 (320/320 通过)
 ```
 
 **运行时生成**：
 
 ```
-.wpb/                              # 项目配置目录（findWpDir 向上查找）
-├── setting.toml                     # WordPress 配置（首次运行自动生成）
-└── data/                            # 数据文件（用户自行配置）
-    └── prompts.md                   # 默认写作指令（自动生成）
+.wpb/                              # 项目配置目录（findWpDir 向上查找，需手动创建）
+├── setting.toml                     # WordPress 配置（手动创建，参考 setting-reference.toml）
+└── data/                            # 数据文件（用户自行放置）
         └── wiedza.md
 ```
 
@@ -561,7 +558,7 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 
 ```
 skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，含 initConfig 首次运行初始化）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (321/321 通过)
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (320/320 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```
