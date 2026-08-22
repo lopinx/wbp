@@ -572,11 +572,17 @@ ok(src.includes('文章 URL 不属于任何已配置站点'), 'fetch origin 未�
 ok(src.includes('posts?slug='), 'fetch 按 slug 定位文章');
 ok(src.includes('posts?search='), 'fetch slug 无结果时回退搜索');
 ok(src.includes('p.link'), 'fetch 搜索兜底精确比对 link');
+// slug 提取跳过纯数字路径段（/{slug}/2/ 分页页码、/{year}/{month}/{slug}/ 日期前缀）
+ok(src.includes('!/^\\d+$/.test(s)'), 'slug 提取跳过纯数字路径段（分页/日期）');
 // context=edit 取 raw 字段
 ok(src.includes('context=edit'), 'fetch 用 context=edit 取 raw 内容');
 // termNames 反查术语名称
 ok(src.includes('termNames'), 'termNames 反查 tags/categories 名称');
 ok(src.includes('include='), 'termNames 用 include 参数反查');
+// WP include 查询按 ID 升序返回；termNames 按文章实际顺序（ids）重排
+ok(src.includes('ids.map(id => byId.get(id))'), 'termNames 按文章实际顺序（ids）重排名称');
+// log() data 参数期望对象；字符串参数（e.message）已合并进 msg 模板
+ok(!/log\([^)]*,\s*e\.message\)/.test(src), 'log 调用不再传字符串 data 参数');
 // fetch 输出 postId/site/instructions 字段
 ok(src.includes('postId: full.id'), 'fetch 输出 postId');
 ok(src.includes('site: siteName'), 'fetch 输出 site 名（字符串，非对象）');

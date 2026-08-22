@@ -348,7 +348,7 @@ const applyImageMap = (html, up) => { if (Object.keys(up).length) for (const [o,
 // 图片处理 + 标签创建（更新/创建路径共用，消除重复）
 async function processImagesAndTags(site, content, tags, title) {
   let finalContent = content; let tagIds = [];
-  if (site.cdn && site.cdn.mode === 'search') { try { const imgs = await searchImages(site.images || {}, tags || [], title); if (imgs.length) finalContent = mixImages(finalContent, imgs); } catch (e) { log('warn', '图片搜索失败:', e.message); } }
+  if (site.cdn && site.cdn.mode === 'search') { try { const imgs = await searchImages(site.images || {}, tags || [], title); if (imgs.length) finalContent = mixImages(finalContent, imgs); } catch (e) { log('warn', `图片搜索失败: ${e.message}`); } }
   else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
   else if (site.cdn && site.cdn.mode === 's3') {
     // S3 图片保留原 URL，但非 S3 域的外链图片仍上传到媒体库
@@ -360,7 +360,7 @@ async function processImagesAndTags(site, content, tags, title) {
   if (tags?.length) {
     const results = await concurrentMap(tags, 5, async (t) => {
       try { return await findOrCreate(site, 'tags', t, tagCache); }
-      catch (e) { log('warn', `标签创建失败: ${t}`, e.message); return null; }
+      catch (e) { log('warn', `标签创建失败: ${t}: ${e.message}`); return null; }
     });
     tagIds = results.filter(r => r !== null);
   }
@@ -385,8 +385,8 @@ async function findPostBySlug(site, articleUrl, slug) {
   if (Array.isArray(bySearch)) { const hit = bySearch.find(p => p.link && (p.link === articleUrl || p.link === articleUrl.replace(/\/+$/, ''))); if (hit) return hit; }
   return null;
 }
-// 术语 ID 反查名称（tags/categories 在文章中只存 ID）
-async function termNames(site, type, ids) { if (!ids?.length) return []; const terms = await wpFetch(site, `${type}?include=${ids.join(',')}&per_page=100`); return Array.isArray(terms) ? terms.map(t => t.name) : []; }
+// 术语 ID 反查名称（tags/categories 在文章中只存 ID）；WP include 查询按 ID 升序返回，按 ids 顺序（文章实际顺序）重排
+async function termNames(site, type, ids) { if (!ids?.length) return []; const terms = await wpFetch(site, `${type}?include=${ids.join(',')}&per_page=100`); if (!Array.isArray(terms)) return []; const byId = new Map(terms.map(t => [t.id, t.name])); return ids.map(id => byId.get(id)).filter(Boolean); }
 
 // ── NitroPack CDN URL 清理 ──
 // NitroPack 将原始图片 URL 包装为：https://cdn-<sub>.nitrocdn.com/<token>/assets/images/optimized/rev-<hash>/<原始URL>
@@ -637,7 +637,9 @@ async function runFetch(sites) {
   const [siteName, site] = findSiteByOrigin(sites, origin);
   if (!site.name) site.name = siteName;
   validateSite(siteName, site);
-  const slug = new URL(articleUrl).pathname.split('/').filter(Boolean).pop();
+  // 跳过纯数字路径段（/{slug}/2/ 的分页页码、/{year}/{month}/{slug}/ 的日期前缀）；纯数字 slug 回退取末段
+  const segs = new URL(articleUrl).pathname.split('/').filter(Boolean);
+  const slug = segs.filter(s => !/^\d+$/.test(s)).pop() || segs.pop();
   if (!slug) die('无法从 URL 提取文章 slug: ' + articleUrl);
   const post = await findPostBySlug(site, articleUrl, slug);
   if (!post) die('未找到文章: ' + articleUrl);
@@ -660,19 +662,19 @@ async function runPick(site) {
   const kw = keywords[Math.floor(Math.random() * keywords.length)];
   const firstKey = kw ? Object.keys(kw)[0] : '';
   const keyword = (kw && firstKey) ? kw[firstKey] : '';
-  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; try { return await readTable(ok[Math.floor(Math.random() * ok.length)]); } catch (e) { log('warn', '产品文件加载失败:', e.message); return []; } };
-  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; try { return loadDocSnippet(ok[Math.floor(Math.random() * ok.length)], 3000); } catch (e) { log('warn', '写作指令加载失败:', e.message); return ''; } };
+  const loadProducts = async () => { const ok = prodPaths.filter(pathOk); if (!ok.length) return []; try { return await readTable(ok[Math.floor(Math.random() * ok.length)]); } catch (e) { log('warn', `产品文件加载失败: ${e.message}`); return []; } };
+  const loadPromptDoc = async () => { const ok = promptPaths.filter(pathOk); if (!ok.length) return ''; try { return loadDocSnippet(ok[Math.floor(Math.random() * ok.length)], 3000); } catch (e) { log('warn', `写作指令加载失败: ${e.message}`); return ''; } };
   const loadExtDocs = async () => {
     const ok = extPaths.filter(ep => pathOk(ep)); if (!ok.length) return '';
     // 并发加载扩展文档，限制并发数避免过多请求；单个加载失败不影响整体，保留 --- <filename> --- 分隔格式
     const parts = await concurrentMap(ok, 5, async (ep) => {
       try { return `\n\n--- ${ep.replace(/\\/g, '/').split('/').pop()} ---\n${await loadDocSnippet(ep, 2000)}`; }
-      catch (e) { log('warn', '扩展知识加载失败:', e.message); return ''; }
+      catch (e) { log('warn', `扩展知识加载失败: ${e.message}`); return ''; }
     });
     return parts.filter(Boolean).join('');
   };
   const [products, promptDoc, extDocs] = await Promise.all([loadProducts(), loadPromptDoc(), loadExtDocs()]);
-  let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', 'S3 不可用:', e.message); } }
+  let images = []; if (site.cdn && site.cdn.mode === 's3') { try { images = await s3List(site.cdn, 50); if (!images.length) log('warn', 'S3 图片池为空'); } catch (e) { log('warn', `S3 不可用: ${e.message}`); } }
   const safe = site.images ? { ...site.images, key: undefined, keys: undefined } : null;
   const pickWarnings = [];
   if (site.cdn && site.cdn.mode === 's3' && !images.length) pickWarnings.push('图片池为空，文章中的图片标签可能无法配图');
