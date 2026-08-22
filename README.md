@@ -6,7 +6,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-≥18.0-green?logo=node.js)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-WTFPL-blue)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-315%2F315%20passing-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-321%2F321%20passing-brightgreen)](#)
 
 </div>
 
@@ -56,7 +56,7 @@ npm i -g github:lopinx/wpb
 |------|------|------|
 | `wpb pick` | 随机选取一个关键词 + 输出完整上下文（JSON） | `wpb pick` |
 | `wpb fetch <url>` | 拉取已发布文章原文（供改写更新） | `wpb fetch https://example.com/old-post` |
-| `wpb publish <file>` | 读取草稿并执行发布（草稿含 postId 时走更新路径） | `wpb publish ~/.wpb/_draft.json` |
+| `wpb publish <file>` | 读取草稿并执行发布（草稿含 postId 时走更新路径） | `wpb publish .wpb/_draft.json` |
 
 ### AI 工具调用（`/wpb`）
 
@@ -79,7 +79,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (315/315 通过)
+npm test           # 运行自检测试套件 (321/321 通过)
 ```
 
 ---
@@ -92,11 +92,11 @@ npm test           # 运行自检测试套件 (315/315 通过)
 npm i -g github:lopinx/wpb
 ```
 
-安装后直接运行 `wpb pick`，首次运行时自动完成：
-1. **生成默认配置**：创建 `~/.wpb/setting.toml`（可后续手动编辑）
-2. **复制数据文件**：将示例关键词、产品、提示词复制到 `~/.wpb/data/`
+安装后在项目根目录运行 `wpb pick`，首次运行时自动完成：
+1. **生成默认配置**：创建 `.wpb/setting.toml`（可后续手动编辑）
+2. **生成写作指令**：创建 `.wpb/data/prompts.md`（默认数据文件，其他由用户自行配置）
 
-然后编辑 `~/.wpb/setting.toml`，填入你的 WordPress 站点信息（URL、用户名、Application Password），再次运行 `wpb pick`。
+然后编辑 `.wpb/setting.toml`，填入你的 WordPress 站点信息（URL、用户名、Application Password），配置关键词文件路径（支持 GSC/Bing/百度站长导出），再次运行 `wpb pick`。
 
 > **可选**：如需为本地已安装的 AI CLI 工具（Claude Code、Gemini CLI 等 11 种）创建命令文件，运行 `wpb install`。该命令在上述基础配置之上额外完成 AI CLI 检测 + 命令文件生成。
 
@@ -104,7 +104,7 @@ npm i -g github:lopinx/wpb
 > ```bash
 > npm uninstall -g @lopinx/wpb
 > ```
-> 如需彻底清理，再手动删除用户数据目录：`rm -rf ~/.wpb`（Windows PowerShell：`Remove-Item -Recurse -Force $HOME\.wpb`）。
+> 如需彻底清理，再手动删除项目配置目录：`rm -rf .wpb`（Windows PowerShell：`Remove-Item -Recurse -Force .wpb`）。
 
 ### 第 2 步：选取关键词
 
@@ -209,7 +209,7 @@ wpb/
 │   └── wpb/
 │       ├── SKILL.md                   # AI 工具命令文件模板
 │       ├── references/
-│       │   └── data/                  # 示例数据文件（安装时复制到 ~/.wpb/data/）
+│       │   └── data/                  # 示例数据文件（安装时复制到 .wpb/data/）
 │       │       ├── keywords.csv       # 关键词池
 │       │       ├── products.csv       # 产品信息
 │       │       ├── prompts.md         # 写作指令
@@ -218,25 +218,22 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # 核心单文件（所有逻辑，含 initConfig 首次运行初始化）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (315/315 通过)
+│               └── selftest.mjs       # 自检测试 (321/321 通过)
 ```
 
 **运行时生成**：
 
 ```
-~/.wpb/                              # 用户配置目录
-├── setting.toml                     # WordPress 配置（npm 安装时自动生成）
-└── data/                            # 数据文件（npm 安装时自动复制）
-    ├── keywords.csv
-    ├── products.csv
-    ├── prompts.md
-    └── extensions/
+.wpb/                              # 项目配置目录（findWpDir 向上查找）
+├── setting.toml                     # WordPress 配置（首次运行自动生成）
+└── data/                            # 数据文件（用户自行配置）
+    └── prompts.md                   # 默认写作指令（自动生成）
         └── wiedza.md
 ```
 
 ---
 
-## 🔧 配置 `~/.wpb/setting.toml`
+## 🔧 配置 `.wpb/setting.toml`
 
 运行 `npm i -g github:lopinx/wpb` 后自动生成默认配置。使用前请确保满足以下要求：
 
@@ -247,7 +244,7 @@ wpb/
 配置文件示例：
 
 ```toml
-# ~/.wpb/setting.toml
+# .wpb/setting.toml
 # 每个 [site.<slug>] 代表一个 WordPress 站点
 # wpb pick 时会随机选取其中一个站点
 
@@ -258,10 +255,10 @@ url        = "https://example.com/wp-json/wp/v2"            # WordPress REST API
 user       = "admin"                                        # WordPress 用户名
 pass       = "xxxx xxxx xxxx xxxx"                          # WP Application Password（至少10位）
 categories = [1, "news", "vape"]                            # 发布分类（数字ID 或 名称字符串，多个用逗号）
-keywords   = ["data/keywords.csv"]                          # 关键词文件（可多个，随机合并选取）
-products   = "data/products.csv"                            # 产品信息文件（可选，可多个，随机选一个）
-prompts    = "data/prompts.md"                              # 写作指令文件（可选，Markdown，可多个，随机选一个）
-extensions = ["data/extensions/wiedza.md"]                  # 扩展知识文件（可选，可多个）
+keywords   = ["data/keywords.csv"]                          # 关键词文件（可多个，随机合并选取；支持 GSC/Bing/百度站长导出）
+#products   = "data/products.csv"                            # 产品信息文件（可选，可多个，随机选一个）
+prompts    = "data/prompts.md"                              # 写作指令文件（默认生成，可选，Markdown，可多个，随机选一个）
+#extensions = ["data/extensions/wiedza.md"]                  # 扩展知识文件（可选，可多个）
 
 # ── 图片处理模式（四选一，见下方详细说明）──
 # mode = "s3"      → 从 S3 图池随机选取图片混排（推荐，图片完全可控）
@@ -564,7 +561,7 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 
 ```
 skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，含 initConfig 首次运行初始化）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (315/315 通过)
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (321/321 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```
