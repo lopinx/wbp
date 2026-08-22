@@ -321,6 +321,8 @@ ok(src.includes('tags.length > 10'), '标签数量上限为 10');
 ok(src.includes("method: 'GET'"), '死链检测使用 GET 而非 HEAD');
 ok(src.includes('catch { return null; }'), '死链检测网络错误返回 null 而非 500');
 ok(/c !== null && c >= 400/.test(src), '死链计 4xx 和 5xx（网络错误不计）');
+// checkDeadLinks 从 checkQuality 提取为独立函数
+ok(src.includes('async function checkDeadLinks'), 'checkDeadLinks 公共函数已提取（死链检测逻辑独立）');
 // navRe 支持多层子路径（如 /category/vape/disposable 不被误判为产品链接）
 ok(/\(\/\[\^\/\]\+\)\*\//.test(src), 'navRe 支持多层子路径匹配');
 
