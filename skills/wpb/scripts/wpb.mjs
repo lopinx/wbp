@@ -535,13 +535,64 @@ async function doInstall() {
   if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
-function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
+// generatePromptContent 回退模板（SKILL.md 不存在时使用）
+function buildFallbackSkill(tool) {
+  return `# WordPress Publisher Skill (${tool?.name || 'wpb'})
 
-function createCommandFile(tool, content) { const { dir } = tool; const filePath = join(homedir(), ...dir, 'wpb', 'SKILL.md'); try { if (!existsSync(dirname(filePath))) mkdirSync(dirname(filePath), { recursive: true }); let skipped = false; if (existsSync(filePath)) { try { if (readFileSync(filePath, 'utf8') === content) skipped = true; } catch { skipped = false; } } if (skipped) console.log(`  • ${tool.name} 命令文件无变化，跳过：${filePath}`); else { writeFileSync(filePath, content, 'utf8'); console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`); } } catch (e) { console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`); } }
+## Purpose
+跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。
+
+## Workflow
+1. wpb pick — 选取关键词与配置
+2. 撰写文章草稿保存为 JSON 文件
+3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布
+4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish
+
+## 注意
+- 数据文件支持 CSV/TXT/XLSX 格式
+- 安装方式：npm i -g github:lopinx/wpb`;
+}
+
+function generatePromptContent(tool) {
+  const skillPath = join(SCRIPT_DIR, '../SKILL.md');
+  if (!existsSync(skillPath)) return buildFallbackSkill(tool);
+  const base = readFileSync(skillPath, 'utf-8');
+  return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base;
+}
+
+function createCommandFile(tool, content) {
+  const { dir } = tool;
+  const filePath = join(homedir(), ...dir, 'wpb', 'SKILL.md');
+  try {
+    if (!existsSync(dirname(filePath))) mkdirSync(dirname(filePath), { recursive: true });
+    let skipped = false;
+    if (existsSync(filePath)) {
+      try { if (readFileSync(filePath, 'utf8') === content) skipped = true; }
+      catch { skipped = false; }
+    }
+    if (skipped) console.log(`  • ${tool.name} 命令文件无变化，跳过：${filePath}`);
+    else { writeFileSync(filePath, content, 'utf8'); console.log(`  ✓ 已创建 ${tool.name} 命令文件：${filePath}`); }
+  } catch (e) {
+    console.warn(`  ✗ 创建 ${tool.name} 命令文件失败：${e.message}`);
+  }
+}
 
 function parseSelection(answer, total) { if (!answer) return []; const a = answer.toLowerCase().trim(); if (a === 'all') return Array.from({ length: total }, (_, i) => i); return a.split(',').map(s => parseInt(s.trim(), 10)).filter(i => !isNaN(i) && i >= 1 && i <= total).map(i => i - 1); }
 
-async function selectTools(tools) { return new Promise(resolve => { console.log('\n请选择要安装的 AI 工具：\n'); tools.forEach((t, i) => console.log(`${i + 1}. ${t.name} — ${t.path}`)); console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：'); const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question('', ans => { rl.close(); const s = parseSelection(ans, tools.length); if (!s.length) { console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n'); resolve([]); } else resolve(s); }); }); }
+async function selectTools(tools) {
+  return new Promise(resolve => {
+    console.log('\n请选择要安装的 AI 工具：\n');
+    tools.forEach((t, i) => console.log(`${i + 1}. ${t.name} — ${t.path}`));
+    console.log('\n输入选项编号（多个选项用逗号分隔），或输入 all 选择全部：');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('', ans => {
+      rl.close();
+      const s = parseSelection(ans, tools.length);
+      if (!s.length) { console.log('\n错误：请输入有效的选项编号（1-数字）或 all\n'); resolve([]); }
+      else resolve(s);
+    });
+  });
+}
 
 
 // 加载文档片段：URL 走 fetchWithRetry，本地走 readFileSync；截取前 maxChars 字符
