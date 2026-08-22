@@ -534,9 +534,9 @@ ok(src.includes('normTitle(p.title.rendered'), 'checkDuplicate 比较归一化 t
 ok(src.includes('fetchWithRetry(u, { method:'), '死链检测使用 fetchWithRetry 重试');
 // uploadExternalImages img src 正则同时匹配单引号和双引号
 ok(src.includes("src=[\"']([^\"']+)[\"']"), 'uploadExternalImages img src 正则匹配单双引号');
-// prompts/extensions 支持 URL 路径（isUrl 判断后走 fetch 而非 readFileSync）
-ok(src.includes('isUrl(p)'), 'prompts 支持 URL 路径');
-ok(src.includes('isUrl(ep)'), 'extensions 支持 URL 路径');
+// prompts/extensions 支持 URL 路径（loadDocSnippet 公共函数统一处理 URL/local）
+ok(src.includes('async function loadDocSnippet'), 'loadDocSnippet 公共函数已提取（消除 isUrl ? fetch : readFileSync 重复）');
+ok(src.includes('isUrl(p)'), 'loadDocSnippet 内部 isUrl 判断 URL 路径');
 
 // ── 10b. fetch 命令与 publish 更新路径 ──
 console.log('\n## 10b. fetch 命令与 publish 更新路径');
@@ -595,6 +595,17 @@ ok(src.includes('更新成功:'), '更新成功日志文案');
 ok(src.includes('[站点:'), '更新日志含站点名');
 // 公共函数 processImagesAndTags 消除重复
 ok(src.includes('processImagesAndTags'), 'processImagesAndTags 公共函数已提取');
+// validateBeforePublish 公共函数消除更新/创建路径重复（checkDuplicate + checkQuality + die）
+ok(src.includes('async function validateBeforePublish'), 'validateBeforePublish 公共函数已提取');
+ok(/validateBeforePublish[\s\S]*?draft\.postId/.test(src), '更新路径调用 validateBeforePublish 传 draft.postId');
+ok(/validateBeforePublish[\s\S]*?, 0\)/.test(src), '创建路径调用 validateBeforePublish 传 0');
+// main 拆分为 runFetch / runPick / runPublish（各 ≤50 行）
+ok(src.includes('async function runFetch'), 'runFetch 已提取');
+ok(src.includes('async function runPick'), 'runPick 已提取');
+ok(src.includes('async function runPublish'), 'runPublish 已提取');
+ok(/async function main\(\) \{[\s\S]*?await runFetch/.test(src), 'main 路由到 runFetch');
+ok(/async function main\(\) \{[\s\S]*?await runPick/.test(src), 'main 路由到 runPick');
+ok(/async function main\(\) \{[\s\S]*?await runPublish/.test(src), 'main 路由到 runPublish');
 // validateDraft postId/site 校验单测
 {
   const vdSrc = src.match(/const validateDraft = d => \{[\s\S]*?return \{ valid: e\.length === 0, errors: e \}; \}/);
