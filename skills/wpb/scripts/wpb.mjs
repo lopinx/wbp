@@ -166,18 +166,21 @@ async function searchImages(cfg, tags, title) {
   return [];
 }
 
-async function fetchWithRetry(url, opts, retries = 3) {
+async function fetchWithRetry(url, opts = {}, retries = 3) {
   const backoff = i => 1000 * 2 ** i + Math.random() * 200;
-  // 保留外部 signal（允许调用方指定更短超时，如死链检测 5s）；未提供时使用默认超时
-  const extSignal = opts.signal || AbortSignal.timeout(TIMEOUT_MS);
+  let lastRes = null;
   for (let i = 0; i <= retries; i++) {
     try {
-      // 每次重试新建独立 signal：外部 signal 会被复用导致剩余时间递减，统一改用新建的 timeout signal
+      // 每次重试新建独立 timeout signal，避免复用已 aborted 的 signal 导致重试失效；
+      // 外部 signal（如死链检测 5s）与 timeout 取较短者
+      const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
+      const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal;
       // 注入 User-Agent：部分服务器（含 Cloudflare）要求 UA 非空，否则握手后断开连接
       const headers = { ...opts.headers };
       if (!Object.keys(headers).some(k => k.toLowerCase() === 'user-agent'))
         headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-      const res = await fetch(url, { ...opts, signal: extSignal, headers });
+      const res = await fetch(url, { ...opts, signal, headers });
+      lastRes = res;
       if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) return res;
       if (i >= retries) return res;
       const d = backoff(i); log('warn', `  请求失败 (${res.status})，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
@@ -186,6 +189,7 @@ async function fetchWithRetry(url, opts, retries = 3) {
       const d = backoff(i); log('warn', `  请求错误: ${e.message}，${Math.round(d)}ms 后重试...`); await new Promise(r => setTimeout(r, d));
     }
   }
+  return lastRes;
 }
 
 // ── S3 列表 ──
@@ -292,6 +296,7 @@ async function processImagesAndTags(site, content, tags, title) {
   let finalContent = content; let tagIds = [];
   if (site.cdn && site.cdn.mode === 'search') { try { const imgs = await searchImages(site.images || {}, tags || [], title); if (imgs.length) finalContent = mixImages(finalContent, imgs); } catch (e) { log('warn', '图片搜索失败:', e.message); } }
   else if (site.cdn && site.cdn.mode === 'cdn') { log('info', 'CDN 模式：保留远程图片 URL 不变'); }
+  else if (site.cdn && site.cdn.mode === 's3') { log('info', 'S3 模式：保留 S3 图片 URL 不变'); }
   else { const up = await uploadExternalImages(site, finalContent); if (Object.keys(up).length) for (const [o, n] of Object.entries(up)) finalContent = finalContent.replaceAll(o, n); }
   if (tags?.length) {
     const results = await concurrentMap(tags, 5, async (t) => {
@@ -419,8 +424,7 @@ const AGENTS_SKILLS = { claude: { name: 'Claude Code', dir: ['.claude', 'skills'
 
 async function doInstall() {
   console.log('=== WordPress 发布器安装程序 ===\n');
-  const SRC_DIR = dirname(fileURLToPath(import.meta.url));
-  const DATA_SRC = join(SRC_DIR, '../references/data');
+  const DATA_SRC = join(SCRIPT_DIR, '../references/data');
   const DATA_DST = join(WP_DIR, 'data');
   if (!existsSync(WP_DIR)) mkdirSync(WP_DIR, { recursive: true });
 
@@ -482,9 +486,9 @@ extensions = ["data/extensions/wiedza.md"]  # 可选，支持 https:// URL
 # 图片搜索 API（配合 cdn.mode="search" 使用）
 #[site.myblog.images]
 #keys = ["your-serper-dev-api-key-1", "your-serper-dev-api-key-2"]  # 随机轮询
-#gl = "pl"                # 国家代码，默认 pl（波兰）
-#hl = "pl"                # 语言代码，默认 pl
-#tbs = "qdr:w"            # 时间范围，默认过去一周
+#gl = "pl"                # 国家代码，未配置则不传（由 Serper 默认）
+#hl = "pl"                # 语言代码，未配置则不传
+#tbs = "qdr:w"            # 时间范围，未配置则不传
 #query = "固定搜索词"           # 可选，填写后直接使用该词搜索图片（忽略文章标题+标签）
 `;
 
@@ -618,8 +622,9 @@ async function main() {
     // categories：draft 有值则解析，无值省略（WP 保留原分类）
     const catIds = draft.categories ? await resolveCategoryIds(targetSite, draft.categories) : undefined;
     const { finalContent, tagIds } = await processImagesAndTags(targetSite, cleanedContent, draft.tags, draft.title);
-    const body = { title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', tags: tagIds };
+    const body = { title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish' };
     if (catIds) body.categories = catIds;
+    if (tagIds.length) body.tags = tagIds;  // 缺失则不传，WP 保留原标签
     const res = await wpFetch(targetSite, `posts/${draft.postId}`, { method: 'POST', body: JSON.stringify(body) });
     log('info', `更新成功: ${res.link} (ID: ${res.id}) [站点: ${targetSiteName}]`);
     return;
@@ -633,7 +638,7 @@ async function main() {
   if (dup) die(`检测到重复标题 (ID: ${dup.id})，请修改标题`);
   if (q.issues.length) die('质量检查不通过: ' + q.issues.join('; '));
   if (q.warnings.length) q.warnings.forEach(w => log('warn', w));
-  const catIds = await resolveCategoryIds(site, site.categories);
+  const catIds = await resolveCategoryIds(site, draft.categories || site.categories);
   const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
   const res = await wpFetch(site, 'posts', { method: 'POST', body: JSON.stringify({ title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish', categories: catIds, tags: tagIds }) });
   log('info', `发布成功: ${res.link} (ID: ${res.id})`);

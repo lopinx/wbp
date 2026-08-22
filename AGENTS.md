@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-01 | Updated: 2026-08-15 -->
+<!-- Generated: 2026-08-01 | Updated: 2026-08-22 -->
 
 # wpb
 
@@ -9,8 +9,8 @@
 
 | 文件 | 说明 |
 |------|------|
-| `skills/wpb/scripts/wpb.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、数据表读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询）、图片混排、质量检查、去重检测（含更新时排除自身）、指数退避重试、缓存、首次运行自动初始化（initConfig）、手动安装（doInstall）、`wpb fetch` 命令（按 URL 域名匹配站点、拉取原文供改写）、publish 更新路径（多站点安全绑定 site + postId）。`readTable` 使用 SheetJS (xlsx 0.20.3) 统一解析 CSV/TXT/XLSX/XLS/URL |
-| `skills/wpb/scripts/__TEST__/selftest.mjs` | 自动化测试 (294/294 通过)，覆盖语法、pick、TOML 解析（含边界情况、数组引号内逗号、混用单双引号、多行数组）、去重哈希、图片混排（含避开小标题/首段前/尾段后、alt/title 派生与 HTML 转义、NitroPack CDN URL 清理）、图片函数（含 searchImages query 字段功能测试、uploadImage decodeURI 回退与 content-type 校验、uploadExternalImages 空 siteOrigin 防护）、WP API 函数（含 wpFetch JSON 解析错误处理、findOrCreate 分页上限防护、checkDuplicate 标题截断保护与 excludeID 排除自身、checkQuality 关键词正则转义防护与 CJK 词数统计、fetchWithRetry 保留外部 signal 与 UA 大小写不敏感注入、validateSite WP_PASSWORD 环境变量分支）、fetch 命令与 publish 更新路径（含 validateDraft postId/site 校验、findSiteByOrigin 域名匹配、processImagesAndTags 公共函数、多站点安全绑定）、s3List endpoint 配置时 region 兜底、loadProducts/loadPromptDoc/loadExtDocs 错误降级保护、setting-reference.toml 字段验证、错误处理（含站点字段校验、JSON 解析错误、validateDraft 非对象防护）、文档验证、安装逻辑（doInstall、initConfig、ensureDefaultData 公共函数、postinstall.mjs 已移除）、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字） |
+| `skills/wpb/scripts/wpb.mjs` | 核心单文件 ES 模块，包含全部功能：TOML 解析、数据表读取、S3 SigV4 签名、WP REST API、图片搜索（Serper.dev 多 key 轮询，gl/hl/tbs 按需传参）、图片混排、质量检查、去重检测（含更新时排除自身）、指数退避重试（fetchWithRetry 每次重试新建 signal、opts 默认空对象防 crash）、缓存、首次运行自动初始化（initConfig + ensureConfig 幂等写入）、手动安装（doInstall）、`wpb fetch` 命令（按 URL 域名匹配站点、拉取原文供改写）、publish 更新路径（多站点安全绑定 site + postId，更新时 tags 缺失保留原标签、categories 缺失保留原分类，创建时 categories 优先 draft 回退 site）。`readTable` 使用 SheetJS (xlsx 0.20.3) 统一解析 CSV/TXT/XLSX/XLS/URL |
+| `skills/wpb/scripts/__TEST__/selftest.mjs` | 自动化测试 (308/308 通过)，覆盖语法、pick、TOML 解析（含边界情况、数组引号内逗号、混用单双引号、多行数组）、去重哈希、图片混排（含避开小标题/首段前/尾段后、alt/title 派生与 HTML 转义、NitroPack CDN URL 清理）、图片函数（含 searchImages gl/hl/tbs 按需传参与 query 字段功能测试、uploadImage decodeURI 回退与 content-type 校验、uploadExternalImages 空 siteOrigin 防护）、WP API 函数（含 wpFetch JSON 解析错误处理、findOrCreate 分页上限防护、checkDuplicate 标题截断保护与 excludeID 排除自身、checkQuality 关键词正则转义防护与 CJK 词数统计、fetchWithRetry 每次重试新建 signal 与 opts 默认空对象防 crash、UA 大小写不敏感注入、validateSite WP_PASSWORD 环境变量分支）、fetch 命令与 publish 更新路径（含 validateDraft postId/site 校验、findSiteByOrigin 域名匹配、processImagesAndTags 公共函数、多站点安全绑定、更新 tags 缺失保留原标签、创建 categories 优先 draft 回退 site）、s3 模式 publish 保留 URL 不上传、s3List endpoint 配置时 region 兜底、loadProducts/loadPromptDoc/loadExtDocs 错误降级保护、setting-reference.toml 字段验证、错误处理（含站点字段校验、JSON 解析错误、validateDraft 非对象防护）、文档验证、安装逻辑（doInstall、initConfig、ensureConfig 幂等写入、ensureDefaultData 公共函数、postinstall.mjs 已移除）、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字） |
 | `package.json` | Node.js 项目清单；`bin` 字段注册全局 `wpb` 命令；无 `postinstall` 钩子（npm 安装不执行脚本，首次运行时自动初始化）；`dependencies` 包含 xlsx (SheetJS 0.20.3, CDN) |
 | `skills/wpb/references/setting-reference.toml` | 完整配置字段参考示例（随仓库分发，安装时不自动复制到 `~/.wpb/`，供用户参照编辑 `~/.wpb/setting.toml`） |
 | `README.md` | 完整用户文档 |
@@ -34,12 +34,12 @@
 
 ### 测试要求
 - `node --check skills/wpb/scripts/wpb.mjs` 验证语法
-- `node skills/wpb/scripts/__TEST__/selftest.mjs` 运行完整测试套件 (294/294 通过)
-- 测试覆盖：语法、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留、避开小标题/首段前/尾段后）、图片函数、WP API 函数（含 fetchWithRetry 保留外部 signal、UA 大小写不敏感注入、validateSite WP_PASSWORD 环境变量分支）、helper 函数、错误处理、文档验证、数据文件完整性、错误边界、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字）、fetch 命令与 publish 更新路径（含 validateDraft postId/site 校验、findSiteByOrigin 域名匹配、processImagesAndTags 公共函数、多站点安全绑定）
+- `node skills/wpb/scripts/__TEST__/selftest.mjs` 运行完整测试套件 (308/308 通过)
+- 测试覆盖：语法、pick、TOML 解析（含边界情况）、去重（含 CJK）、图片混排（含属性保留、避开小标题/首段前/尾段后）、图片函数（含 searchImages gl/hl/tbs 按需传参）、WP API 函数（含 fetchWithRetry 每次重试新建 signal、opts 默认空对象防 crash、UA 大小写不敏感注入、validateSite WP_PASSWORD 环境变量分支）、helper 函数、错误处理、文档验证、数据文件完整性、错误边界、CSV/TXT/XLSX/URL 解析、边缘情况（BOM、空行、日期、合并单元格、大数字）、fetch 命令与 publish 更新路径（含 validateDraft postId/site 校验、findSiteByOrigin 域名匹配、processImagesAndTags 公共函数、多站点安全绑定、更新 tags 缺失保留原标签、创建 categories 优先 draft 回退 site）
 
 ### 常用模式
 - 迷你 TOML 解析器，支持内联注释、单引号、转义字符、点号键（site.myblog.name）
-- **无 postinstall 钩子，首次运行时自动初始化**：npm 全局安装 git 依赖时用 symlink，postinstall 脚本在 symlink 目标被清理后无法执行。因此 `package.json` 不设 postinstall 钩子，改为 `wpb.mjs` 的 `initConfig()` 在首次 `wpb pick`/`publish` 时检测 `~/.wpb/setting.toml` 不存在则自动创建配置 + 复制数据。`doInstall`（`wpb install` 命令，手动）额外做 AI CLI 检测 + 命令文件生成。DEFAULT_CFG 单一定义于 wpb.mjs，无脱钩风险
+- **无 postinstall 钩子，首次运行时自动初始化**：npm 全局安装 git 依赖时用 symlink，postinstall 脚本在 symlink 目标被清理后无法执行。因此 `package.json` 不设 postinstall 钩子，改为 `wpb.mjs` 的 `initConfig()` 在首次 `wpb pick`/`publish` 时检测 `~/.wpb/setting.toml` 不存在则自动创建配置 + 复制数据。`ensureConfig()` 为幂等写入函数（已存在即跳过），`doInstall` 与 `initConfig` 共用，防止升级或二次安装覆盖用户配置。`doInstall`（`wpb install` 命令，手动）额外做 AI CLI 检测 + 命令文件生成（`createCommandFile` 内容相同时跳过写入）。DEFAULT_CFG 单一定义于 wpb.mjs，无脱钩风险
 - S3 SigV4 签名，支持 prefix 前缀筛选、endpoint 可选、domain 自定义、环境变量覆盖密钥
 - WordPress REST API 基础认证（应用程序密码）
 - 通过段落位置重构实现图片混排

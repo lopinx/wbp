@@ -339,9 +339,10 @@ ok(src.includes('#accessKeyId'), 'DEFAULT_CFG 使用 accessKeyId');
 ok(src.includes('#secretAccessKey'), 'DEFAULT_CFG 使用 secretAccessKey');
 // publish 命令缺少文件参数时提示用法
 ok(src.includes("用法: wpb publish"), 'publish 缺参数时显示用法');
-// fetchWithRetry 保留外部 signal（允许调用方指定更短超时，如死链检测 5s）
-ok(/opts\.signal \|\| AbortSignal\.timeout\(TIMEOUT_MS\)/.test(src), 'fetchWithRetry 保留外部 signal，无则用默认超时');
-ok(/signal: extSignal/.test(src), 'fetchWithRetry 传递 extSignal 给 fetch');
+// fetchWithRetry 每次重试新建独立 timeout signal，避免复用已 aborted signal 导致重试失效
+ok(/AbortSignal\.timeout\(TIMEOUT_MS\)/.test(src), 'fetchWithRetry 每次重试新建 timeout signal');
+ok(/AbortSignal\.any\(\[opts\.signal/.test(src), 'fetchWithRetry 外部 signal 与 timeout 取较短者');
+ok(src.includes('opts = {}'), 'fetchWithRetry opts 默认空对象（防止单参数调用 crash）');
 // uploadImage 走 fetchWithRetry 重试
 ok(/await fetchWithRetry\(`\$\{site\.url/.test(src), 'uploadImage 走 fetchWithRetry 重试');
 // fetchWithRetry UA 注入大小写不敏感（避免已有 User-Agent 键时重复设置）
@@ -369,17 +370,21 @@ ok(src.includes('const body = { q }'), 'searchImages 请求体以 q 为基础按
   if (!fnSrc) error('searchImages 函数提取失败');
   else {
     let capturedBody = null;
-    const mockFetch = async (url, opts) => ({ ok: true, json: async () => ({ images: [{ imageUrl: 'https://img.test/x.jpg' }] }) });
-    // 用 mock 替换 fetchWithRetry，注入 log 函数
+    const mockFetch = async (url, opts) => { capturedBody = JSON.parse(opts.body); return { ok: true, json: async () => ({ images: [{ imageUrl: 'https://img.test/x.jpg' }] }) }; };
     const si = eval('(function() { var fetchWithRetry = arguments[0]; var log = arguments[1]; ' + fnSrc[0].replace('async function searchImages', 'return async function searchImages') + '; })');
     const searchImages = si(mockFetch, () => {});
-    // 无 query → 搜索词由 tags+title 组合
+    // 无配置 → body 不含 gl/hl/tbs
     await searchImages({ keys: ['k1'] }, ['elfbar', 'vape'], 'Best Vape 2024');
-    // 有 query → 直接使用 query 值，忽略 tags+title
+    ok(capturedBody && !('gl' in capturedBody) && !('hl' in capturedBody) && !('tbs' in capturedBody), '无配置时 body 不含 gl/hl/tbs');
+    // 有配置 → body 含对应字段
+    await searchImages({ keys: ['k1'], gl: 'cn', tbs: 'qdr:m' }, ['elfbar', 'vape'], 'Best Vape 2024');
+    ok(capturedBody.gl === 'cn' && capturedBody.tbs === 'qdr:m' && !('hl' in capturedBody), '有配置时 body 含 gl/tbs、不含未配 hl');
+    // query → body.q 使用 query 值
     await searchImages({ keys: ['k1'], query: '固定搜索词' }, ['elfbar', 'vape'], 'Best Vape 2024');
-    // query 优先级测试：即使 tags/title 为空，query 仍生效
+    ok(capturedBody.q === '固定搜索词', 'query 传入 body.q');
+    // query 优先级：tags/title 为空时 query 仍生效
     await searchImages({ keys: ['k1'], query: 'override' }, [], '');
-    ok(true, 'searchImages query 功能测试无异常');
+    ok(capturedBody.q === 'override', 'query 即使 tags/title 为空仍生效');
   }
 }
 // mixImages alt/title HTML 特殊字符转义
@@ -529,6 +534,11 @@ ok(src.includes('草稿中指定的站点'), 'draft.site 不匹配时明确报�
 // 更新时 categories 用 draft.categories，无值省略
 ok(src.includes('draft.categories ? await resolveCategoryIds'), '更新 categories 有值则解析');
 ok(src.includes('if (catIds) body.categories = catIds'), '更新无 categories 时省略（保留原分类）');
+ok(src.includes('if (tagIds.length) body.tags = tagIds'), '更新无 tags 时省略（保留原标签，不清空）');
+// 创建路径 categories 优先用 draft，回退 site
+ok(src.includes('draft.categories || site.categories'), '创建 categories 优先 draft，回退 site');
+// s3 模式 publish 时保留 URL 不上传（避免 s3 图片被误传到媒体库）
+ok(/mode === 's3'.*保留 S3 图片 URL/.test(src), 's3 模式 publish 保留 S3 图片 URL 不变');
 // 更新成功日志含站点名
 ok(src.includes('更新成功:'), '更新成功日志文案');
 ok(src.includes('[站点:'), '更新日志含站点名');
