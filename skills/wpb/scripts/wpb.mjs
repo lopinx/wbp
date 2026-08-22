@@ -424,6 +424,16 @@ function mixImages(html, images) {
 }
 
 // ── 质量检查 ──
+// 死链检测：取外链前 3 个，GET 请求 5s 超时，4xx/5xx 计为失效（网络错误不计）
+async function checkDeadLinks(extHref) {
+  if (!extHref.length) return 0;
+  const codes = await Promise.all(extHref.slice(0, 3).map(async u => {
+    try { const r = await fetchWithRetry(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }); return r.status; }
+    catch { return null; }
+  }));
+  return codes.filter(c => c !== null && c >= 400).length;
+}
+
 async function checkQuality(title, content, excerpt, tags, site) {
   const issues = [], warnings = [];
   const body = content || excerpt || '';
@@ -435,7 +445,15 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const wordCount = cjkChars + nonCjkWords;
   const paras = body.match(PARA_RE) || [];
   const h3 = body.match(/<h3[^>]*>/g) || [];
-  const checks = [[wordCount < 5000, `词数 ${wordCount} 少于 5000`], [paras.length < 10, `仅有 ${paras.length} 个段落`], [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`], [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`], [!excerpt || excerpt.length < 50, `摘要过短 (${excerpt?.length || 0} 字符)`], [!tags || tags.length < 3, `仅有 ${tags?.length || 0} 个标签`], [tags && tags.length > 10, `标签过多 (${tags.length} 个)`]];
+  const checks = [
+    [wordCount < 5000, `词数 ${wordCount} 少于 5000`],
+    [paras.length < 10, `仅有 ${paras.length} 个段落`],
+    [h3.length < 3, `仅有 ${h3.length} 个 H3 标题`],
+    [!title || title.length < 10, `标题过短 (${title?.length || 0} 字符)`],
+    [!excerpt || excerpt.length < 50, `摘要过短 (${excerpt?.length || 0} 字符)`],
+    [!tags || tags.length < 3, `仅有 ${tags?.length || 0} 个标签`],
+    [tags && tags.length > 10, `标签过多 (${tags.length} 个)`],
+  ];
   for (const [c, m] of checks) if (c) issues.push(m);
   const siteOrigin = siteOriginOf(site.url);
   // 一次性提取所有 href 链接，复用于内链/外链/死链检测
@@ -458,8 +476,7 @@ async function checkQuality(title, content, excerpt, tags, site) {
   const extHref = allLinks.filter(u => !siteOrigin || !u.startsWith(siteOrigin));
   if (!extHref.length) warnings.push('E-E-A-T 信号不足 (无外部权威外链，建议引用权威来源链接)');
   if (extHref.length) {
-    const codes = await Promise.all(extHref.slice(0, 3).map(async u => { try { const r = await fetchWithRetry(u, { method: 'GET', signal: AbortSignal.timeout(5000), redirect: 'follow' }); return r.status; } catch { return null; } }));
-    const dead = codes.filter(c => c !== null && c >= 400).length;
+    const dead = await checkDeadLinks(extHref);
     if (dead) issues.push(`失效链接: ${dead} 个`);
   }
   return { issues, warnings };
@@ -474,13 +491,48 @@ async function doInstall() {
   // 用户手动运行 `wpb install`（TTY）时走完整 AI CLI 检测 + 命令文件创建流程；
   // 无 postinstall 钩子；npm 全局安装时用 symlink，脚本在 symlink 目标被清理后无法执行
   const checkCLI = cmd => { try { execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 3000 }); return true; } catch { return false; }; };
-  const detectedTools = Object.entries(AGENTS_SKILLS).map(([slug, tool]) => { const found = checkCLI(slug) || existsSync(join(homedir(), ...tool.dir.slice(0, -1))); console.log(found ? `  ✓ 检测到 ${tool.name}` : `  ✗ 未找到 ${tool.name}`); return found ? { ...tool, slug, path: join(homedir(), ...tool.dir) } : null; }).filter(Boolean);
+  const detectedTools = Object.entries(AGENTS_SKILLS)
+    .map(([slug, tool]) => {
+      const found = checkCLI(slug) || existsSync(join(homedir(), ...tool.dir.slice(0, -1)));
+      console.log(found ? `  ✓ 检测到 ${tool.name}` : `  ✗ 未找到 ${tool.name}`);
+      return found ? { ...tool, slug, path: join(homedir(), ...tool.dir) } : null;
+    })
+    .filter(Boolean);
 
-  if (!detectedTools.length) { console.log('\n⚠ 未检测到任何已安装的 AI 工具，跳过命令文件创建。'); console.log('   如需安装，请先安装对应的 AI CLI，然后重新运行 wpb install。\n'); } else { console.log(`\n检测到 ${detectedTools.length} 个可安装工具：${detectedTools.map(t => t.name).join(', ')}\n`); const isTTY = process.stdin.isTTY; let selectedIndices = !isTTY ? (detectedTools.map((_, i) => i)) : await selectTools(detectedTools); if (!isTTY) console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n'); const selectedTools = selectedIndices.map(i => detectedTools[i]); console.log('\n正在创建 AI 工具命令文件...\n'); for (const tool of selectedTools) { const promptContent = generatePromptContent(tool); createCommandFile(tool, promptContent); } }
+  if (!detectedTools.length) {
+    console.log('\n⚠ 未检测到任何已安装的 AI 工具，跳过命令文件创建。');
+    console.log('   如需安装，请先安装对应的 AI CLI，然后重新运行 wpb install。\n');
+  } else {
+    console.log(`\n检测到 ${detectedTools.length} 个可安装工具：${detectedTools.map(t => t.name).join(', ')}\n`);
+    const isTTY = process.stdin.isTTY;
+    let selectedIndices = !isTTY ? detectedTools.map((_, i) => i) : await selectTools(detectedTools);
+    if (!isTTY) console.log('⚠ 非 TTY 环境，使用默认配置：安装所有检测到的工具\n');
+    const selectedTools = selectedIndices.map(i => detectedTools[i]);
+    console.log('\n正在创建 AI 工具命令文件...\n');
+    for (const tool of selectedTools) {
+      const promptContent = generatePromptContent(tool);
+      createCommandFile(tool, promptContent);
+    }
+  }
 
-  console.log('=== 全局命令 ==='); console.log('✓ wpb 命令已通过 npm 全局安装自动注册'); console.log('  升级方式：npm update -g @lopinx/wpb');
+  console.log('=== 全局命令 ===');
+  console.log('✓ wpb 命令已通过 npm 全局安装自动注册');
+  console.log('  升级方式：npm update -g @lopinx/wpb');
 
-  console.log(`\n=== 安装完成 ===`); console.log(`全局命令：wpb（在项目根目录运行：wpb pick / wpb fetch <URL> / wpb publish）`); console.log(`升级方式：npm update -g @lopinx/wpb`); console.log(`\n下一步：手动创建配置文件 .wpb/setting.toml（参考 skills/wpb/references/setting-reference.toml）`); console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：\n  macOS/Linux (bash/zsh)：\n    export WP_PASSWORD="your-wordpress-password"\n    export AWS_ACCESS_KEY_ID="your-aws-access-key"\n    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"\n  Windows (PowerShell)：\n    $env:WP_PASSWORD="your-wordpress-password"\n    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"\n    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"'); if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
+  console.log('\n=== 安装完成 ===');
+  console.log('全局命令：wpb（在项目根目录运行：wpb pick / wpb fetch <URL> / wpb publish）');
+  console.log('升级方式：npm update -g @lopinx/wpb');
+  console.log('\n下一步：手动创建配置文件 .wpb/setting.toml（参考 skills/wpb/references/setting-reference.toml）');
+  console.log('\n安全建议：设置环境变量以避免明文存储在 TOML 中：');
+  console.log('  macOS/Linux (bash/zsh)：');
+  console.log('    export WP_PASSWORD="your-wordpress-password"');
+  console.log('    export AWS_ACCESS_KEY_ID="your-aws-access-key"');
+  console.log('    export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
+  console.log('  Windows (PowerShell)：');
+  console.log('    $env:WP_PASSWORD="your-wordpress-password"');
+  console.log('    $env:AWS_ACCESS_KEY_ID="your-aws-access-key"');
+  console.log('    $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"');
+  if (detectedTools.length) console.log(`\nAI 命令：${detectedTools.map(t => t.invoke).join(', ')}`);
 }
 
 function generatePromptContent(tool) { const skillPath = join(SCRIPT_DIR, '../SKILL.md'); if (existsSync(skillPath)) { const base = readFileSync(skillPath, 'utf-8'); return tool?.invoke ? `<!-- 调用前缀: ${tool.invoke} -->\n${base}` : base; } return `# WordPress Publisher Skill (${tool?.name || 'wpb'})\n\n## Purpose\n跨平台 WordPress 发布 CLI。工作流：wpb pick → 撰写 → wpb publish。支持更新：wpb fetch <URL> → 改写 → wpb publish。\n\n## Workflow\n1. wpb pick — 选取关键词与配置\n2. 撰写文章草稿保存为 JSON 文件\n3. wpb publish <草稿文件路径> — 去重/质量检查/图片处理/发布\n4. 更新已有文章：wpb fetch <URL> 拉取原文 → 改写（保留 postId+site）→ wpb publish\n\n## 注意\n- 数据文件支持 CSV/TXT/XLSX 格式\n- 安装方式：npm i -g github:lopinx/wpb`; }
