@@ -166,31 +166,23 @@ async function searchImages(cfg, tags, title) {
         headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }, 1); // 每个请求内部重试 1 次（共 2 次尝试）
-      if (!res.ok) {
+      if (res.ok) {
+        let data;
+        try { data = await res.json(); } catch { log('warn', '  图片搜索响应解析失败'); }
+        if (data?.images?.length) return data.images.map(i => i.imageUrl).filter(u => u && /^https?:\/\//.test(u));
+        log('warn', `  图片搜索返回空结果 (key ${keyIndex+1})`);
+      } else {
         log('warn', `  图片搜索失败 (key ${keyIndex+1}): ${res.status}`);
-        attempt++;
-        if (attempt < maxAttempts) await new Promise(r => setTimeout(r, backoff(attempt)));
-        continue;
       }
-      let data;
-      try { data = await res.json(); } catch {
-        log('warn', '  图片搜索响应解析失败');
-        attempt++;
-        continue;
-      }
-      if (data.images && data.images.length) {
-        return data.images.map(i => i.imageUrl).filter(u => u && /^https?:\/\//.test(u));
-      }
-      log('warn', `  图片搜索返回空结果 (key ${keyIndex+1})`);
-      attempt++;
     } catch (e) {
       log('warn', `  图片搜索错误 (key ${keyIndex+1}): ${e.message}`);
-      attempt++;
-      if (attempt < maxAttempts) {
-        const delay = backoff(attempt);
-        log('debug', `  等待 ${Math.round(delay)}ms 后重试...`);
-        await new Promise(r => setTimeout(r, delay));
-      }
+    }
+    // 所有失败路径统一退避（非 2xx/解析失败/空结果/网络错误），避免快速轮询触发限流
+    attempt++;
+    if (attempt < maxAttempts) {
+      const delay = backoff(attempt);
+      log('debug', `  等待 ${Math.round(delay)}ms 后重试...`);
+      await new Promise(r => setTimeout(r, delay));
     }
   }
   log('warn', `  所有图片搜索尝试失败 (${maxAttempts} 次)`);
@@ -330,7 +322,7 @@ async function findOrCreate(site, type, name, cache) {
 // WP REST 默认 context 不返回 title.raw，rendered 含 HTML 实体（&amp; 等）；归一化后比较保证去重有效
 const decodeHtml = s => String(s).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '');
 const normTitle = t => decodeHtml(t).replace(/\s+/g, ' ').trim();
-async function checkDuplicate(site, title, excludeId = 0) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); return posts.find(p => p.id !== excludeId && p.title && (normTitle(p.title.raw || '') === normTitle(title) || normTitle(p.title.rendered || '') === normTitle(title))) || null; }
+async function checkDuplicate(site, title, excludeId = 0) { const posts = await wpFetch(site, `posts?search=${encodeURIComponent(title.slice(0, 100))}&status=any&per_page=20`); if (!Array.isArray(posts)) throw new Error(`WP API posts 响应非数组: ${JSON.stringify(posts).slice(0, 100)}`); return posts.find(p => p.id !== excludeId && p.title && (normTitle(p.title.raw || '') === normTitle(title) || normTitle(p.title.rendered || '') === normTitle(title))) || null; }
 
 async function resolveCategoryIds(site, cats) { return Promise.all(asArray(cats).map(c => { const isId = typeof c === 'number' || /^\d+$/.test(String(c)); return isId ? String(c) : findOrCreate(site, 'categories', c, categoryCache); })); }
 
@@ -699,8 +691,8 @@ async function runPublish(sites, siteNames) {
       die('多站点环境下更新文章需在草稿中指定 site 字段（站点名），请先用 wpb fetch 获取完整草稿上下文');
     }
     await validateBeforePublish(site, draft, cleanedContent, draft.postId);
-    // categories：draft 有值则解析，无值省略（WP 保留原分类）
-    const catIds = draft.categories ? await resolveCategoryIds(site, draft.categories) : undefined;
+    // categories：draft 有值则解析，空数组视为未指定（省略，WP 保留原分类——与创建路径回退语义一致）
+    const catIds = draft.categories?.length ? await resolveCategoryIds(site, draft.categories) : undefined;
     const { finalContent, tagIds } = await processImagesAndTags(site, cleanedContent, draft.tags, draft.title);
     const body = { title: draft.title, content: finalContent, excerpt: draft.excerpt || '', status: 'publish' };
     if (catIds) body.categories = catIds;

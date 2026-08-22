@@ -79,7 +79,7 @@ npm i -g github:lopinx/wpb
 ### npm scripts
 
 ```bash
-npm test           # 运行自检测试套件 (343/343 通过)
+npm test           # 运行自检测试套件 (344/344 通过)
 ```
 
 ---
@@ -216,7 +216,7 @@ wpb/
 │       └── scripts/
 │           ├── wpb.mjs                # 核心单文件（所有逻辑，无初始化逻辑）
 │           └── __TEST__/
-│               └── selftest.mjs       # 自检测试 (343/343 通过)
+│               └── selftest.mjs       # 自检测试 (344/344 通过)
 ```
 
 **运行时生成**：
@@ -558,7 +558,7 @@ $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 
 ```
 skills/wpb/scripts/wpb.mjs         # 核心单文件（所有逻辑在此，无初始化逻辑）
-skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (343/343 通过)
+skills/wpb/scripts/__TEST__/selftest.mjs  # 自检测试套件 (344/344 通过)
 skills/wpb/SKILL.md                # AI 工具命令文件模板
 skills/wpb/references/data/        # 示例数据文件
 ```

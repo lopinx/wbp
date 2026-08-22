@@ -423,8 +423,8 @@ ok(src.includes('const body = { q }'), 'searchImages 请求体以 q 为基础按
     ok(capturedBody.q === 'override', 'query 即使 tags/title 为空仍生效');
   }
 }
-// searchImages 非 2xx 响应也退避（防止快速轮询 key 触发限流）
-ok(/图片搜索失败[\s\S]{0,200}?backoff\(attempt\)/.test(src), 'searchImages 非 2xx 重试前退避');
+// searchImages 所有失败路径统一退避（防止快速轮询 key 触发限流）
+ok(/attempt\+\+;\s*\n\s*if \(attempt < maxAttempts\) \{\s*\n\s*const delay = backoff\(attempt\)/.test(src), 'searchImages 所有失败路径统一退避（非 2xx/解析失败/空结果/网络错误）');
 // mixImages alt/title HTML 特殊字符转义
 {
   const escMix = mix('<p>P1</p><p>P2</p>', ['https://x.com/red-shoe.jpg']);
@@ -582,6 +582,8 @@ ok(src.includes('site 必须是字符串'), 'validateDraft 校验 site 字符串
 // checkDuplicate 加 excludeId 参数（更新时排除自身）
 ok(src.includes('excludeId = 0'), 'checkDuplicate 加 excludeId 参数');
 ok(src.includes('p.id !== excludeId'), 'checkDuplicate 排除指定 ID');
+// checkDuplicate 非数组响应防护（WP 返回错误对象时给出明确报错而非晦涩 TypeError，与 findOrCreate 防护对齐）
+ok(/checkDuplicate[\s\S]*?Array\.isArray\(posts\)/.test(src), 'checkDuplicate 非数组响应明确报错');
 // 更新路径：draft.postId 存在时走 POST 更新
 ok(src.includes('draft.postId !== undefined'), 'publish 检测 postId 判断更新路径');
 ok(src.includes('posts/${draft.postId}'), '更新走 posts/{id} 路径');
@@ -592,7 +594,7 @@ ok(src.includes('草稿中指定的站点'), 'draft.site 不匹配时明确报�
 // draft.site 精确绑定创建/更新路径通用（防多站点随机重选发错站）
 ok(src.includes('草稿含 site 时精确绑定站点'), 'publish 按 draft.site 精确绑定站点（创建/更新通用）');
 // 更新时 categories 用 draft.categories，无值省略
-ok(src.includes('draft.categories ? await resolveCategoryIds'), '更新 categories 有值则解析');
+ok(src.includes('draft.categories?.length ? await resolveCategoryIds'), '更新 categories 非空才解析（空数组省略，保留原分类）');
 ok(src.includes('if (catIds) body.categories = catIds'), '更新无 categories 时省略（保留原分类）');
 ok(src.includes('if (tagIds.length) body.tags = tagIds'), '更新无 tags 时省略（保留原标签，不清空）');
 // 创建路径 categories 优先用 draft，回退 site
