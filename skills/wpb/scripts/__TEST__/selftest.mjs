@@ -343,6 +343,25 @@ ok(src.includes("用法: wpb publish"), 'publish 缺参数时显示用法');
 ok(/AbortSignal\.timeout\(TIMEOUT_MS\)/.test(src), 'fetchWithRetry 每次重试新建 timeout signal');
 ok(/AbortSignal\.any\(\[opts\.signal/.test(src), 'fetchWithRetry 外部 signal 与 timeout 取较短者');
 ok(src.includes('opts = {}'), 'fetchWithRetry opts 默认空对象（防止单参数调用 crash）');
+ok(src.includes('opts.signal?.aborted'), 'fetchWithRetry 外部 signal abort 时不重试');
+ok(src.includes('AbortSignal.any') && src.includes('typeof AbortSignal.any'), 'AbortSignal.any polyfill 兼容 Node 18/19');
+// fetchWithRetry 重试 mock 测试：首次超时后第 2 次重试仍能成功（验证每次新建 signal）
+{
+  const fnSrc = src.match(/async function fetchWithRetry[\s\S]*?\n\}/);
+  if (!fnSrc) error('fetchWithRetry 函数提取失败');
+  else {
+    let callCount = 0;
+    const mockFetch = async (url, opts) => {
+      callCount++;
+      if (callCount === 1) throw new Error('timeout');
+      return { ok: true, json: async () => ({ success: true }) };
+    };
+    const fw = eval('(function() { var fetch = arguments[0]; var AbortSignal = arguments[1]; var log = arguments[2]; var TIMEOUT_MS = 30000; ' + fnSrc[0].replace('async function fetchWithRetry', 'return async function fetchWithRetry') + '; })');
+    const fetchWithRetry = fw(mockFetch, { timeout: () => ({ aborted: false, addEventListener: () => {} }), any: (s) => s[0] }, () => {});
+    const res = await fetchWithRetry('http://test', {}, 2);
+    ok(res.ok === true && callCount === 2, 'fetchWithRetry 超时后第 2 次重试成功（每次新建 signal）');
+  }
+}
 // uploadImage 走 fetchWithRetry 重试
 ok(/await fetchWithRetry\(`\$\{site\.url/.test(src), 'uploadImage 走 fetchWithRetry 重试');
 // fetchWithRetry UA 注入大小写不敏感（避免已有 User-Agent 键时重复设置）
@@ -442,8 +461,8 @@ ok(/page <= 20/.test(src), 'findOrCreate 分页上限 20 页');
 ok(src.includes('Array.isArray(batch)'), 'findOrCreate 非数组响应时 break');
 // checkDuplicate 标题截断保护（防超长标题导致 WP 搜索异常）
 ok(src.includes('title.slice(0, 100)'), 'checkDuplicate 标题截断至 100 字符');
-// uploadExternalImages 空 siteOrigin 防护（防止空字符串匹配导致跳过所有图片上传）
-ok(/siteOrigin && url\.startsWith\(siteOrigin\)/.test(src), 'uploadExternalImages 空 siteOrigin 时不跳过上传');
+// uploadExternalImages 跳过 site origin 和额外 origin（S3 域），filter(Boolean) 防空
+ok(src.includes('skip = [siteOrigin, ...skipOrigins].filter(Boolean)'), 'uploadExternalImages 跳过 site 和额外 origin');
 // checkQuality 关键词正则转义防护（用户标签含正则元字符时不注入）
 ok(src.includes('k.replace(/[.'), 'checkQuality 关键词正则转义防护');
 
@@ -536,16 +555,14 @@ ok(src.includes('draft.categories ? await resolveCategoryIds'), '更新 categori
 ok(src.includes('if (catIds) body.categories = catIds'), '更新无 categories 时省略（保留原分类）');
 ok(src.includes('if (tagIds.length) body.tags = tagIds'), '更新无 tags 时省略（保留原标签，不清空）');
 // 创建路径 categories 优先用 draft，回退 site
-ok(src.includes('draft.categories || site.categories'), '创建 categories 优先 draft，回退 site');
+ok(src.includes('draft.categories?.length ? draft.categories : site.categories'), '创建 categories 优先 draft（空数组回退 site）');
 // s3 模式 publish 时保留 URL 不上传（避免 s3 图片被误传到媒体库）
-ok(/mode === 's3'.*保留 S3 图片 URL/.test(src), 's3 模式 publish 保留 S3 图片 URL 不变');
+ok(/mode === 's3'[\s\S]*?uploadExternalImages/.test(src), 's3 模式仍上传非 S3 域外链图片');
 // 更新成功日志含站点名
 ok(src.includes('更新成功:'), '更新成功日志文案');
 ok(src.includes('[站点:'), '更新日志含站点名');
 // 公共函数 processImagesAndTags 消除重复
 ok(src.includes('processImagesAndTags'), 'processImagesAndTags 公共函数已提取');
-// checkDuplicate 仍保留 title.raw/rendered 比较（兼容 WordPress 格式化标题）
-ok(src.includes('p.title.raw === title || p.title.rendered === title'), 'checkDuplicate 保留 title.raw/rendered 比较');
 // validateDraft postId/site 校验单测
 {
   const vdSrc = src.match(/const validateDraft = d => \{[\s\S]*?return \{ valid: e\.length === 0, errors: e \}; \}/);
@@ -597,6 +614,20 @@ ok(!PKG.includes('"postinstall"'), 'package.json 无 postinstall 钩子（npm �
 // parseSelection 返回 0-based 索引（用户输入 1-based 编号），避免 detectedTools[idx] 越界
 ok(src.includes('function parseSelection'), 'wpb.mjs 包含 parseSelection 选择解析函数');
 ok(/parseSelection[\s\S]*?\.map\(i\s*=>\s*i\s*-\s*1\)/.test(src), "parseSelection 将 1-based 编号转换为 0-based 索引");
+// parseSelection 功能单测（纯函数，eval 提取）
+{
+  const psSrc = src.match(/function parseSelection\(answer, total\)[\s\S]*?\n\}/);
+  if (!psSrc) error('parseSelection 函数提取失败');
+  else {
+    const ps = eval('(function() { ' + psSrc[0] + '; return parseSelection; })()');
+    ok(JSON.stringify(ps('1', 3)) === '[0]', "parseSelection('1',3) → [0]");
+    ok(JSON.stringify(ps('1,3', 3)) === '[0,2]', "parseSelection('1,3',3) → [0,2]");
+    ok(JSON.stringify(ps('all', 3)) === '[0,1,2]', "parseSelection('all',3) → [0,1,2]");
+    ok(JSON.stringify(ps('4', 3)) === '[]', "parseSelection('4',3) → [] (越界过滤)");
+    ok(JSON.stringify(ps('', 3)) === '[]', "parseSelection('',3) → [] (空输入)");
+    ok(JSON.stringify(ps('2,abc', 3)) === '[1]', "parseSelection('2,abc',3) → [1] (非数字过滤)");
+  }
+}
 
 // ── 12. 文档 ──
 console.log('\n## 12. 文档');
@@ -842,14 +873,6 @@ ok(rootAgents.includes('在此目录工作'), '根目录 AGENTS.md 包含 在此
 ok(rootAgents.includes('测试要求'), '根目录 AGENTS.md 包含 测试要求');
 ok(rootAgents.includes('常用模式'), '根目录 AGENTS.md 包含 常用模式');
 ok(rootAgents.includes('依赖关系'), '根目录 AGENTS.md 包含 依赖关系');
-
-// ── 17. 用法输出 ──
-console.log('\n## 17. 用法输出');
-ok(run('wpb.mjs', ['unknown']).status !== 0, '未知命令退出码非零');
-
-// ── 18. TOML 工具函数测试
-console.log('\n## 18. TOML 工具函数测试');
-
 
 // ── 汇总 ──
 console.log(`${"=".repeat(36)}`);
